@@ -2,9 +2,13 @@ library(readr)
 library(dplyr)
 library(janitor)
 library(ggplot2)
+library(readxl)
+
 
 
 ETQ_path <- "data/data_24.05/LimeSurveyResults_ExplicitTaskKnowledge_03052024.txt.csv"
+
+info_path <- "data/data_24.05/VP_information_03052024.xlsx"
 
 analyze_etq_data <- function(ETQ_data) {
   # Analyze answers
