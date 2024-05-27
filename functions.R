@@ -3,12 +3,15 @@ library(dplyr)
 library(janitor)
 library(ggplot2)
 library(readxl)
+library(tidyr)
 
 
 
 ETQ_path <- "data/data_24.05/LimeSurveyResults_ExplicitTaskKnowledge_03052024.txt.csv"
 
 info_path <- "data/data_24.05/VP_information_03052024.xlsx"
+
+WPT_path <- "data/data_24.05/WPT_results/Results/"
 
 analyze_etq_data <- function(ETQ_data) {
   # Analyze answers
@@ -96,3 +99,26 @@ visualize_overall_scores <- function(ETQ_data) {
           axis.text = element_text(size = 12))
 }
 
+
+#WPT files
+
+extract_participant_id <- function(file_name) {
+  id <- sub("VP_(\\d+)_.*", "\\1", file_name)
+  return(id)
+}
+
+load_WPT_file <- function(file_path) {
+  df <- read_delim(file_path, delim = ";", col_names = TRUE)
+  df <- mutate(df, response = as.character(response))  # Ensure 'response' is character
+  participant_id <- extract_participant_id(basename(file_path))  # Extract participant ID
+  df <- df %>% mutate(n = participant_id) %>% select(n, everything())  # Add participant ID as first column
+  return(df)
+}
+
+
+clean_WPT_data <- function(df) {
+  df_clean <- df %>%
+    filter(trialType != "reactivation" & trialType != "control") %>%
+    drop_na(trialNumber, blockNumber, trialType, stimulusPattern, pSun, correctOutcome, actualOutcome, response, correctness, reactionTime)
+  return(df_clean)
+}
