@@ -70,14 +70,10 @@ analyze_etq_data <- function(ETQ_data) {
       1, 0
     ))
   
-  # Score for the twelfth question
-  ETQ_data <- ETQ_data %>%
-    mutate(score_q13 = ifelse(g02q13_sq002_welche_antwort_beschreibt_am_besten_die_strategie_die_sie_zur_vorhersage_des_wetters_benutzt_haben_ich_konnte_mich_daran_erinnern_welche_kartenkombination_welches_wetter_vorhersagt == "Ja", 1, 0))
-  
   # Calculate the overall score by summing score_q1 to score_q13
   ETQ_data <- ETQ_data %>%
     mutate(overall_score = score_q2 + score_q3 + score_q4 + score_q5 + 
-             score_q6 + score_q7 + score_q8 + score_q9 + score_q10 + score_q11 + score_q12 + score_q13)
+             score_q6 + score_q7 + score_q8 + score_q9 + score_q10 + score_q11 + score_q12)
   
   # Reorder columns to place overall_score as the first column
   ETQ_data <- ETQ_data %>%
