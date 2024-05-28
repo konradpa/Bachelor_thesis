@@ -3,6 +3,7 @@ install.packages("dplyr")
 install.packages("janitor")
 install.packages("ggplot2")
 install.packages("readxl")
+install.packages("tidyr")
 
 
 # Install and load necessary packages
@@ -11,6 +12,7 @@ library(dplyr)
 library(janitor)
 library(ggplot2)
 library(readxl)
+library(tidyr)
 source("functions.R")
 
 # Read the ETQ data from the file
@@ -51,6 +53,29 @@ visualize_overall_scores(ETQ_data)
 ETQ_data$id_antwort_id
 
 
+
+#WPT Data
+
+WPT_file_list <- list.files(WPT_path, pattern = "*.csv", full.names = TRUE)
+
+WPT_data_list <- lapply(WPT_file_list, load_WPT_file)
+WPT_data <- bind_rows(WPT_data_list)
+
+WPT_data$correctness <- clean_WPT_data(WPT_data)
+
+# remove trials without correct answwer
+WPT_data <- WPT_data %>%
+  filter(correctness != -1)
+
+# Calculate overall accuracy
+WPT_data <- WPT_data%>%
+  mutate(correct = ifelse(correctness == 1, 1, 0))
+
+WPT_accuracy <- WPT_data %>%
+  group_by(n) %>%
+  summarise(accuracy = mean(correct))
+
+print(WPT_accuracy)
 
 
 
