@@ -13,6 +13,52 @@ info_path <- "data/data_24.05/VP_information_03052024.xlsx"
 
 WPT_path <- "data/data_24.05/WPT_results/Results/"
 
+format_vpn <- function(vpn) {
+  paste0("VP_", sprintf("%03d", as.numeric(vpn)))
+}
+
+
+# analyze ETQ data
+
+correct_orders <- list(
+  "1234" = c("Quadrate", "Karos", "Kreise", "Dreiecke"),
+  "2134" = c("Karos", "Quadrate", "Kreise", "Dreiecke"),
+  "3124" = c("Kreise", "Quadrate", "Karos", "Dreiecke"),
+  "4123" = c("Dreiecke", "Quadrate", "Karos", "Kreise"),
+  "1324" = c("Quadrate", "Kreise", "Karos", "Dreiecke"),
+  "2314" = c("Karos", "Kreise", "Quadrate", "Dreiecke"),
+  "3214" = c("Kreise", "Karos", "Quadrate", "Dreiecke"),
+  "4321" = c("Dreiecke", "Kreise", "Karos", "Quadrate"),
+  "1243" = c("Quadrate", "Karos", "Dreiecke", "Kreise"),
+  "2143" = c("Karos", "Quadrate", "Dreiecke", "Kreise"),
+  "3142" = c("Kreise", "Quadrate", "Dreiecke", "Karos"),
+  "1342" = c("Quadrate", "Kreise", "Dreiecke", "Karos"),
+  "2413" = c("Karos", "Dreiecke", "Quadrate", "Kreise"),
+  "3412" = c("Kreise", "Dreiecke", "Quadrate", "Karos"),
+  "1432" = c("Quadrate", "Dreiecke", "Kreise", "Karos"),
+  "4231" = c("Dreiecke", "Karos", "Quadrate", "Kreise"),
+  "1423" = c("Quadrate", "Dreiecke", "Karos", "Kreise"),
+  "3241" = c("Kreise", "Quadrate", "Dreiecke", "Karos"),
+  "4213" = c("Dreiecke", "Karos", "Kreise", "Quadrate"),
+  "2341" = c("Karos", "Kreise", "Dreiecke", "Quadrate")
+)
+
+# Function to check if participant's answer matches the correct order
+check_correct_order <- function(row, correct_orders) {
+  correct_order <- correct_orders[[as.character(row$wpt_random_card_order_map)]]
+  if (is.null(correct_order)) {
+    return(0) # Return 0 if the order map is not found or is NA
+  }
+  participant_order <- c(
+    row$g02q12_1_jede_der_karten_wurde_ihnen_immer_an_einer_bestimmten_position_dargeboten_bitte_bringen_sie_die_karten_in_die_richtige_reihenfolge_von_oben_1_wurde_ganz_links_prasentiert_nach_unten_4_wurde_ganz_rechts_prasentiert_rank_1,
+    row$g02q12_2_jede_der_karten_wurde_ihnen_immer_an_einer_bestimmten_position_dargeboten_bitte_bringen_sie_die_karten_in_die_richtige_reihenfolge_von_oben_1_wurde_ganz_links_prasentiert_nach_unten_4_wurde_ganz_rechts_prasentiert_rank_2,
+    row$g02q12_3_jede_der_karten_wurde_ihnen_immer_an_einer_bestimmten_position_dargeboten_bitte_bringen_sie_die_karten_in_die_richtige_reihenfolge_von_oben_1_wurde_ganz_links_prasentiert_nach_unten_4_wurde_ganz_rechts_prasentiert_rank_3,
+    row$g02q12_4_jede_der_karten_wurde_ihnen_immer_an_einer_bestimmten_position_dargeboten_bitte_bringen_sie_die_karten_in_die_richtige_reihenfolge_von_oben_1_wurde_ganz_links_prasentiert_nach_unten_4_wurde_ganz_rechts_prasentiert_rank_4
+  )
+  return(ifelse(all(participant_order == correct_order), 1, 0))
+}
+
+
 analyze_etq_data <- function(ETQ_data) {
   # Analyze answers
   
@@ -62,13 +108,9 @@ analyze_etq_data <- function(ETQ_data) {
   
   # Score for the eleventh question
   ETQ_data <- ETQ_data %>%
-    mutate(score_q12 = ifelse(
-      g02q12_1_jede_der_karten_wurde_ihnen_immer_an_einer_bestimmten_position_dargeboten_bitte_bringen_sie_die_karten_in_die_richtige_reihenfolge_von_oben_1_wurde_ganz_links_prasentiert_nach_unten_4_wurde_ganz_rechts_prasentiert_rank_1 == "Quadrate" &
-        g02q12_2_jede_der_karten_wurde_ihnen_immer_an_einer_bestimmten_position_dargeboten_bitte_bringen_sie_die_karten_in_die_richtige_reihenfolge_von_oben_1_wurde_ganz_links_prasentiert_nach_unten_4_wurde_ganz_rechts_prasentiert_rank_2 == "Karos" &
-        g02q12_3_jede_der_karten_wurde_ihnen_immer_an_einer_bestimmten_position_dargeboten_bitte_bringen_sie_die_karten_in_die_richtige_reihenfolge_von_oben_1_wurde_ganz_links_prasentiert_nach_unten_4_wurde_ganz_rechts_prasentiert_rank_3 == "Kreise" &
-        g02q12_4_jede_der_karten_wurde_ihnen_immer_an_einer_bestimmten_position_dargeboten_bitte_bringen_sie_die_karten_in_die_richtige_reihenfolge_von_oben_1_wurde_ganz_links_prasentiert_nach_unten_4_wurde_ganz_rechts_prasentiert_rank_4 == "Dreiecke",
-      1, 0
-    ))
+    rowwise() %>%
+    mutate(score_q12 = check_correct_order(cur_data(), correct_orders)) %>%
+    ungroup()
   
   # Calculate the overall score by summing score_q1 to score_q13
   ETQ_data <- ETQ_data %>%
