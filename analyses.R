@@ -36,25 +36,35 @@ ETQ_data <- ETQ_data %>%
 
 ETQ_data$VPN <- sapply(ETQ_data$VPN, format_vpn)
 
+head(ETQ_data)
 #add card order to ETQ data
 
 ETQ_data <- ETQ_data %>%
   left_join(info_data %>% select(VPN, "wpt_random_card_order_map"), by = "VPN")
 
 # Analyze ETQ data for overall score
-ETQ_data <- analyze_etq_data(ETQ_data)
+ETQ_data<- analyze_etq_data(ETQ_data)
 
-# View the data with the new overall_score column as the first column
-print(colnames(ETQ_data))
+# add group info to ETQ accuracy data
 
-ETQ_data$wpt_random_card_order_map
+ETQ_data <- ETQ_data %>%
+  left_join(info_data %>% select(VPN, "group"), by = "VPN")
 
-mean(ETQ_data$overall_score)
-
+ETQ_data<- ETQ_data %>%
+  mutate(simplified_condition = ifelse(grepl("NF", group), "NF", "Sham"))
 
 # visualize the overall ETQ scores
 visualize_overall_scores(ETQ_data)
 
+#check for group differnces
+
+mean_accuracy_by_condition_ETQ <- ETQ_data %>%
+  group_by(simplified_condition) %>% summarize(mean_overall = mean(overall_score, na.rm = TRUE))
+
+
+t_test_result_ETQ<- t.test(overall_score ~ simplified_condition, data = ETQ_data)
+
+print(t_test_result_WPT)
 
 
 
@@ -63,23 +73,51 @@ visualize_overall_scores(ETQ_data)
 WPT_file_list <- list.files(WPT_path, pattern = "*.csv", full.names = TRUE)
 
 WPT_data_list <- lapply(WPT_file_list, load_WPT_file)
+
 WPT_data <- bind_rows(WPT_data_list)
 
-WPT_data$correctness <- clean_WPT_data(WPT_data)
+WPT_data <- clean_WPT_data(WPT_data)
 
-# remove trials without correct answwer
+WPT_data <- WPT_data %>%
+  rename(VPN = n)
+
+WPT_data$VPN <- sapply(WPT_data$VPN, format_vpn)
+
+# remove trials without correct answer or control
 WPT_data <- WPT_data %>%
   filter(correctness != -1)
 
 # Calculate overall accuracy
-WPT_data <- WPT_data%>%
-  mutate(correct = ifelse(correctness == 1, 1, 0))
 
 WPT_accuracy <- WPT_data %>%
-  group_by(n) %>%
-  summarise(accuracy = mean(correct))
+  group_by(VPN) %>%
+  summarise(accuracy = mean(correctness))
 
 print(WPT_accuracy)
+
+mean(WPT_accuracy$accuracy)
+
+# add condition to WPT accuracy 
+WPT_accuracy <- WPT_accuracy%>%
+  left_join(info_data %>% select(VPN, "group"), by = "VPN")
+
+WPT_accuracy <- WPT_accuracy %>%
+  mutate(simplified_condition = ifelse(grepl("NF", group), "NF", "Sham"))
+
+
+mean_accuracy_by_condition_WPT <- WPT_accuracy %>%
+  group_by(simplified_condition) %>% summarize(mean_accuracy = mean(accuracy, na.rm = TRUE))
+
+
+# test for differences
+t_test_result_WPT<- t.test(accuracy ~ simplified_condition, data = WPT_accuracy)
+
+print(t_test_result_WPT)
+
+
+# Calculate Strategies used 
+
+WPT_data
 
 
 
