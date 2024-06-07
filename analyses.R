@@ -114,16 +114,16 @@ WPT_accuracy_VPN <- WPT_data %>%
 mean(WPT_accuracy_VPN$accuracy)
 
 # add condition to WPT accuracy 
-WPT_accuracy <- WPT_accuracy%>%
+WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
   left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
 
 
-mean_accuracy_by_condition_WPT <- WPT_accuracy %>%
+mean_accuracy_by_condition_WPT <- WPT_accuracy_VPN %>%
   group_by(group) %>% summarize(mean_accuracy = mean(accuracy, na.rm = TRUE))
 
 
 # test for differences
-t_test_result_WPT<- t.test(accuracy ~ group, data = WPT_accuracy)
+t_test_result_WPT<- t.test(accuracy ~ group, data = WPT_accuracy_VPN)
 
 print(t_test_result_WPT)
 
@@ -153,16 +153,101 @@ head(WPT_data$stimulusPattern)
 
 table(WPT_data$stimulus)
 
+# clean WPT data columns
+
+WPT_data_filtered <- WPT_data %>%
+  select(VPN, trialNumber, blockNumber, response, stimulusPattern, correctOutcome, correctness, group)
+
+
+# add WPT order
+
+info_data_clean_subset <- info_data_clean %>%
+  select(VPN, wpt_random_card_order_map)
+
+WPT_data_filtered <- WPT_data_filtered %>%
+  left_join(info_data_clean_subset, by = "VPN")
+
+table(WPT_data_filtered$wpt_random_card_order_map)
+
+WPT_data_filtered$stimulusPattern
+
 # Calculate Strategies used
-
-singleton_patterns <- list(
-  c(1, 0, 0, 0), # Only cue 1 is present
-  c(0, 1, 0, 0), # Only cue 2 is present
-  c(0, 0, 1, 0), # Only cue 3 is present
-  c(0, 0, 0, 1)  # Only cue 4 is present
-)
-
 source("WPT_strategy_analysis.R")
+
+
+# Add strategies 
+WPT_data_filtered <- WPT_data_filtered %>%
+  mutate(strategy_multicue = correctOutcome,
+         strategy_singleton = sapply(stimulusPattern, determine_strategy_singleton),
+         one_cue_good = sapply(stimulusPattern, determine_one_cue_good),
+         one_cue_bad = sapply(stimulusPattern, determine_one_cue_bad))
+
+
+matching_percentage <- WPT_data_filtered %>%
+  summarise(percentage = mean(one_cue_bad == correctOutcome, na.rm = TRUE) * 100)
+
+# Display the result
+
+head(WPT_data_filtered)
+
+
+
+# show stretegy mactch
+percentage_matches <- calculate_percentage_match(WPT_data_filtered)
+print(percentage_matches)
+
+## normalized scores for particpants
+strategy_scores_VPN <- WPT_data_filtered %>%
+  group_by(VPN) %>%
+  do(calculate_normalized_scores(.))
+
+## normalized scores for particpants + blocks
+strategy_scores_blocks <- WPT_data_filtered %>%
+  group_by(VPN, blockNumber) %>%
+  do(calculate_normalized_scores(.))
+
+print(strategy_scores_VPN)
+print(strategy_scores_blocks)
+
+str(strategy_scores_VPN)
+str(strategy_scores_blocks)
+
+strategy_results <- find_best_strategies(strategy_scores_blocks, strategy_scores_VPN)
+
+# add group info
+
+strategy_results <- strategy_results %>%
+  left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
+
+print(strategy_results)
+
+# Plotting
+
+# Reshape the data to long format for easier plotting
+# Assuming your dataframe `final_results` has the correct column names
+strategy_results_long <- strategy_results %>%
+  pivot_longer(cols = starts_with("best_strategy_block"), names_to = "block", values_to = "strategy") %>%
+  mutate(block = factor(block, levels = c("best_strategy_block_1", "best_strategy_block_2", "best_strategy_block_3", "best_strategy_block_4", "best_strategy_overall"),
+                        labels = c("Block 1", "Block 2", "Block 3", "Block 4", "Overall")))
+
+# Create bar plots for each block and overall
+ggplot(strategy_results_long, aes(x = strategy, fill = group)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~ block, scales = "free") +
+  labs(title = "Number of Participants Using Each Strategy", x = "Strategy", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Use the overall strategy column for the bar plot
+strategy_results_long_overall <- strategy_results_long %>%
+  select(VPN, best_strategy_overall, group)
+
+# Create the bar plot for the overall strategy
+ggplot(strategy_results_long_overall, aes(x = best_strategy_overall, fill = group)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Number of Participants Using Each Strategy (Overall)", x = "Strategy", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 
