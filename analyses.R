@@ -249,5 +249,69 @@ ggplot(strategy_results_long_overall, aes(x = best_strategy_overall, fill = grou
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+# add feedback values
+library(R.matlab)
+
+extract_values <- function(file_path) {
+  data <- readMat(file_path)
+  values <- NA  # Default to NA if vectNFBs.PSC is not present
+  
+  if (!is.null(data$vectNFBs.PSC)) {
+    values <- data$vectNFBs.PSC[1, ]  # Extract all values
+  }
+  return(values)
+}
+
+# Define the file paths
+file_paths <- sprintf("Data/NF_values_11.06/NFBs_subj_%03d.mat", 1:33)
+
+# Initialize a list to store the extracted values
+extracted_values <- list()
+
+# Loop through the file paths and extract the required values
+for (i in 1:33) {
+  if (file.exists(file_paths[i])) {
+    extracted_values[[i]] <- extract_values(file_paths[i])
+  } else {
+    extracted_values[[i]] <- NA  # Handle missing files by filling with NA
+  }
+}
+
+# Determine the maximum length of extracted values
+max_length <- max(sapply(extracted_values, function(x) ifelse(is.null(x) || all(is.na(x)), 0, length(x))))
+
+# Pad shorter vectors with NA to ensure all have the same length
+padded_values <- lapply(extracted_values, function(x) {
+  if (is.null(x) || all(is.na(x))) {
+    return(rep(NA, max_length))
+  } else {
+    return(c(x, rep(NA, max_length - length(x))))
+  }
+})
+
+# Convert the list to a data frame
+extracted_df <- do.call(rbind, padded_values)
+colnames(extracted_df) <- paste0("V", 1:ncol(extracted_df))
+extracted_df <- as.data.frame(extracted_df)
+
+# Add a column for the VPN number
+extracted_df$VPN <- sprintf("VP_%03d", 1:33)
+
+# Calculate the average of the extracted values for each participant
+extracted_df$average <- rowMeans(extracted_df[, 1:max_length], na.rm = TRUE)
+
+extracted_df$average_last_5 <- apply(extracted_df[, 1:max_length], 1, function(row) {
+  last_5 <- tail(na.omit(row), 5)
+  if (length(last_5) < 5) {
+    return(NA)
+  } else {
+    return(mean(last_5, na.rm = TRUE))
+  }
+})
 
 
+# Print the filtered data frame
+print(extracted_df)
+
+# Optionally, add group info here
+# extracted_df$group <- "Group Information"
