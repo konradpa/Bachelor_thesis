@@ -72,6 +72,7 @@ mean_accuracy_by_condition_ETQ <- ETQ_data_clean %>%
   group_by(group) %>% summarize(mean_overall = mean(overall_score, na.rm = TRUE))
 
 
+## **t test**  Explicit task knowledge
 t_test_result_ETQ<- t.test(overall_score ~ group, data = ETQ_data_clean)
 
 
@@ -121,14 +122,28 @@ WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
 mean_accuracy_by_condition_WPT <- WPT_accuracy_VPN %>%
   group_by(group) %>% summarize(mean_accuracy = mean(accuracy, na.rm = TRUE))
 
-
-# test for differences
+# test for differences - **t-test**  WPT performance with groups
 t_test_result_WPT<- t.test(accuracy ~ group, data = WPT_accuracy_VPN)
 
 print(t_test_result_WPT)
 
 
-# pe block
+## **check for correlation** with ETQ scores
+
+WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
+  left_join(ETQ_data_clean %>% select(VPN, "overall_score"), by = "VPN")
+
+correlation_result <- cor.test(WPT_accuracy_VPN$accuracy, WPT_accuracy_VPN$overall_score)
+
+ggplot(WPT_accuracy_VPN, aes(x = overall_score, y = accuracy)) +
+  geom_point() +  # Add points
+  geom_smooth(method = "lm", col = "blue") +  # Add regression line
+  labs(title = "Scatter Plot of Accuracy vs. Overall Score",
+       x = "Overall Score",
+       y = "Accuracy") +
+  theme_minimal()
+
+# per block
 
 WPT_accuracy_blocks <- WPT_data %>%
   group_by(blockNumber) %>%
@@ -220,6 +235,34 @@ strategy_results <- strategy_results %>%
   left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
 
 print(strategy_results)
+
+## check for group differnces in straetegy use **chi square test**
+
+# Define the columns to test
+strategy_columns <- c("best_strategy_block_1", "best_strategy_block_2", "best_strategy_block_3", "best_strategy_block_4", "best_strategy_overall")
+
+# Function to perform chi-square test and return results
+perform_chi_square_test <- function(data, column, group_column) {
+  contingency_table <- table(data[[column]], data[[group_column]])
+  chisq_test <- chisq.test(contingency_table)
+  return(list(column = column, chi_square_test = chisq_test))
+}
+
+# Perform chi-square test for each strategy column and store results
+chi_square_results <- lapply(strategy_columns, perform_chi_square_test, data = strategy_results, group_column = "group")
+
+# Print the results
+for (result in chi_square_results) {
+  cat("Results for column:", result$column, "\n")
+  print(result$chi_square_test)
+  cat("\n")
+}
+
+# Perform the chi-square test
+chi_square_test <- chisq.test(contingency_table)
+
+# Print the result
+print(chi_square_test)
 
 # Plotting
 

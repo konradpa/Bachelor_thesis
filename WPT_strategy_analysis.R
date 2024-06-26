@@ -1,6 +1,8 @@
 library(dplyr)
 
-# Function to determine strategy_singleton based on stimulusPattern
+
+# "simulate" results for speific strategy 
+## Function to determine strategy_singleton based on stimulusPattern
 determine_strategy_singleton <- function(stimulus_pattern) {
   # Split the stimulus pattern into individual characters
   pattern <- strsplit(stimulus_pattern, " ")[[1]]
