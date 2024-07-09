@@ -356,5 +356,13 @@ extracted_df$average_last_5 <- apply(extracted_df[, 1:max_length], 1, function(r
 # Print the filtered data frame
 print(extracted_df)
 
-# Optionally, add group info here
-# extracted_df$group <- "Group Information"
+## add to other data
+
+WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
+  left_join(extracted_df %>% select(VPN, "average_last_5"), by = "VPN")
+
+
+## test for corelations
+
+
+
