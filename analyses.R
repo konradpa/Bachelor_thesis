@@ -22,6 +22,7 @@ str(info_data)
 
 info_data_clean <- info_data[info_data$group != "NF/stress" & info_data$group != "sham/stress", ]
 
+info_data_clean$wpt_random_card_order_map
 
 head(info_data)
 head(info_data_clean)
@@ -105,6 +106,12 @@ WPT_data <- WPT_data %>%
 
 table(WPT_data$group)
 
+# Remove or handle rows with missing values in stimulusPattern or correctOutcome
+WPT_data <- WPT_data %>%
+  filter(!is.na(stimulusPattern) & !is.na(correctOutcome)) %>%
+  mutate(stimulusPattern = gsub("\\s+", " ", trimws(stimulusPattern))) # Ensure consistent spacing and remove leading/trailing spaces
+
+
 # Calculate overall accuracy
 
 WPT_accuracy_VPN <- WPT_data %>%
@@ -158,21 +165,10 @@ ggplot(WPT_accuracy_blocks, aes(x = factor(blockNumber), y = accuracy)) +
   theme_minimal()
 
 
-# Remove or handle rows with missing values in stimulusPattern or correctOutcome
-WPT_data <- WPT_data %>%
-  filter(!is.na(stimulusPattern) & !is.na(correctOutcome)) %>%
-  mutate(stimulusPattern = gsub("\\s+", " ", trimws(stimulusPattern))) # Ensure consistent spacing and remove leading/trailing spaces
-
-# Inspect the cleaned data
-head(WPT_data$stimulusPattern)
-
-table(WPT_data$stimulus)
-
 # clean WPT data columns
 
 WPT_data_filtered <- WPT_data %>%
   select(VPN, trialNumber, blockNumber, response, stimulusPattern, correctOutcome, correctness, group)
-
 
 # add WPT order
 
@@ -180,14 +176,24 @@ info_data_clean_subset <- info_data_clean %>%
   select(VPN, wpt_random_card_order_map)
 
 WPT_data_filtered <- WPT_data_filtered %>%
-  left_join(info_data_clean_subset, by = "VPN")
+  left_join(info_data_clean_subset, by = "VPN", copy = TRUE)
+
 
 table(WPT_data_filtered$wpt_random_card_order_map)
 
-WPT_data_filtered$stimulusPattern
+
+# change stimulusPattern according to card order
+
+source("WPT_strategy_analysis.R")
+
+WPT_data_filtered$stimulusPattern <- as.character(WPT_data_filtered$stimulusPattern)
+WPT_data_filtered$wpt_random_card_order_map <- as.character(WPT_data_filtered$wpt_random_card_order_map)
+
+
+WPT_data_filtered <- WPT_data_filtered %>%
+  mutate(stimulusPattern = mapply(rearrange_pattern, stimulusPattern, wpt_random_card_order_map))
 
 # Calculate Strategies used
-source("WPT_strategy_analysis.R")
 
 
 # Add strategies 
@@ -198,13 +204,9 @@ WPT_data_filtered <- WPT_data_filtered %>%
          one_cue_bad = sapply(stimulusPattern, determine_one_cue_bad))
 
 
-matching_percentage <- WPT_data_filtered %>%
-  summarise(percentage = mean(one_cue_bad == correctOutcome, na.rm = TRUE) * 100)
-
 # Display the result
 
 head(WPT_data_filtered)
-
 
 
 # show stretegy mactch
@@ -362,7 +364,10 @@ WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
   left_join(extracted_df %>% select(VPN, "average_last_5"), by = "VPN")
 
 
-## test for corelations
+## test for correlations
+
+correlation_result <- cor.test(WPT_accuracy_VPN$accuracy, WPT_accuracy_VPN$average_last_5)
+
 
 
 

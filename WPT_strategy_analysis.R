@@ -1,5 +1,25 @@
 library(dplyr)
 
+# Define a function to rearrange the stimulus pattern based on the order
+rearrange_pattern <- function(pattern, order) {
+  if (is.na(order)) {
+    return(pattern)
+  }
+  
+  # Split the pattern into individual characters
+  pattern_split <- strsplit(pattern, " ")[[1]]
+  
+  # Convert the order to numeric indices
+  order_indices <- as.numeric(strsplit(order, "")[[1]])
+  
+  # Rearrange the pattern based on the order
+  rearranged_pattern <- pattern_split[order_indices]
+  
+  # Join the rearranged pattern back into a string
+  rearranged_pattern_str <- paste(rearranged_pattern, collapse = " ")
+  
+  return(rearranged_pattern_str)
+}
 
 # "simulate" results for speific strategy 
 ## Function to determine strategy_singleton based on stimulusPattern
@@ -14,10 +34,10 @@ determine_strategy_singleton <- function(stimulus_pattern) {
     # If more than one "1", assign a random value of "rain" or "sun"
     return(sample(c("rain", "sun"), 1))
   } else if (pattern[3] == "1" || pattern[4] == "1") {
-    # If there's only one "1" and it's in the third or fourth place, assign "sun"
+    # If there's only one "1" and it's in the third or fourth place, assign "rain"
     return("rain")
   } else if (pattern[1] == "1" || pattern[2] == "1") {
-    # If there's only one "1" and it's in the first or second place, assign "rain"
+    # If there's only one "1" and it's in the first or second place, assign "sun"
     return("sun")
   } else {
     # Default case, if no specific conditions are met (should not occur based on given rules)
