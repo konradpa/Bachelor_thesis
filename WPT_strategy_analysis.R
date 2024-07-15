@@ -45,44 +45,53 @@ determine_strategy_singleton <- function(stimulus_pattern) {
   }
 }
 
-determine_one_cue_good <- function(stimulus_pattern) {
-  # Split the stimulus pattern into individual characters
+# Functions to determine cue-based strategies
+determine_cue_1 <- function(stimulus_pattern) {
   pattern <- strsplit(stimulus_pattern, " ")[[1]]
-  
-  # Check the first digit and assign "sun" or "rain" accordingly
   if (pattern[1] == "1") {
     return("sun")
-  } else if (pattern[1] == "0") {
-    return("rain")
   } else {
-    return(NA)  # In case of unexpected values
+    return("rain")
   }
 }
 
-determine_one_cue_bad <- function(stimulus_pattern) {
-  # Split the stimulus pattern into individual characters
+determine_cue_2 <- function(stimulus_pattern) {
   pattern <- strsplit(stimulus_pattern, " ")[[1]]
-  
-  # Check the second digit and assign "sun" or "rain" accordingly
   if (pattern[2] == "1") {
     return("sun")
-  } else if (pattern[2] == "0") {
-    return("rain")
   } else {
-    return(NA)  # In case of unexpected values
+    return("rain")
   }
 }
 
+determine_cue_3 <- function(stimulus_pattern) {
+  pattern <- strsplit(stimulus_pattern, " ")[[1]]
+  if (pattern[3] == "1") {
+    return("rain")
+  } else {
+    return("sun")
+  }
+}
 
-## Function to calculate the percentage match
+determine_cue_4 <- function(stimulus_pattern) {
+  pattern <- strsplit(stimulus_pattern, " ")[[1]]
+  if (pattern[4] == "1") {
+    return("rain")
+  } else {
+    return("sun")
+  }
+}
+
 calculate_percentage_match <- function(data) {
   data %>%
     group_by(VPN) %>%
     summarise(
       multicue_match = mean(response == strategy_multicue) * 100,
       singleton_match = mean(response == strategy_singleton) * 100,
-      one_cue_good_match = mean(response == one_cue_good) * 100,
-      one_cue_bad_match = mean(response == one_cue_bad) * 100
+      cue_1_match = mean(response == cue_1, na.rm = TRUE) * 100,
+      cue_2_match = mean(response == cue_2, na.rm = TRUE) * 100,
+      cue_3_match = mean(response == cue_3, na.rm = TRUE) * 100,
+      cue_4_match = mean(response == cue_4, na.rm = TRUE) * 100
     )
 }
 
@@ -93,52 +102,63 @@ calculate_normalized_scores <- function(group) {
   # Calculate the squared differences for each trial
   multicue_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$strategy_multicue == "sun", 1, 0))^2)
   singleton_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$strategy_singleton == "sun", 1, 0))^2)
-  one_cue_good_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$one_cue_good == "sun", 1, 0))^2)
-  one_cue_bad_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$one_cue_bad == "sun", 1, 0))^2)
+  cue_1_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_1 == "sun", 1, 0))^2, na.rm = TRUE)
+  cue_2_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_2 == "sun", 1, 0))^2, na.rm = TRUE)
+  cue_3_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_3 == "rain", 1, 0))^2, na.rm = TRUE)
+  cue_4_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_4 == "rain", 1, 0))^2, na.rm = TRUE)
   
   # Normalize the scores
   multicue_score <- multicue_squared_diff / n_presentations
   singleton_score <- singleton_squared_diff / n_presentations
-  one_cue_good_score <- one_cue_good_squared_diff / n_presentations
-  one_cue_bad_score <- one_cue_bad_squared_diff / n_presentations
+  cue_1_score <- cue_1_squared_diff / n_presentations
+  cue_2_score <- cue_2_squared_diff / n_presentations
+  cue_3_score <- cue_3_squared_diff / n_presentations
+  cue_4_score <- cue_4_squared_diff / n_presentations
   
   return(data.frame(
     VPN = unique(group$VPN),
     multicue_score = multicue_score,
     singleton_score = singleton_score,
-    one_cue_good_score = one_cue_good_score,
-    one_cue_bad_score = one_cue_bad_score
+    cue_1_score = cue_1_score,
+    cue_2_score = cue_2_score,
+    cue_3_score = cue_3_score,
+    cue_4_score = cue_4_score
   ))
 }
 
-## Define the function to calculate normalized scores for a single group (participant and block)
+# Define the function to calculate normalized scores for a single group (participant and block)
 calculate_normalized_scores_blocks <- function(group) {
   n_presentations <- nrow(group)
   
   # Calculate the squared differences for each trial
   multicue_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$strategy_multicue == "sun", 1, 0))^2)
   singleton_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$strategy_singleton == "sun", 1, 0))^2)
-  one_cue_good_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$one_cue_good == "sun", 1, 0))^2)
-  one_cue_bad_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$one_cue_bad == "sun", 1, 0))^2)
+  cue_1_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_1 == "sun", 1, 0))^2, na.rm = TRUE)
+  cue_2_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_2 == "sun", 1, 0))^2, na.rm = TRUE)
+  cue_3_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_3 == "rain", 1, 0))^2, na.rm = TRUE)
+  cue_4_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_4 == "rain", 1, 0))^2, na.rm = TRUE)
   
   # Normalize the scores
   multicue_score <- multicue_squared_diff / n_presentations
   singleton_score <- singleton_squared_diff / n_presentations
-  one_cue_good_score <- one_cue_good_squared_diff / n_presentations
-  one_cue_bad_score <- one_cue_bad_squared_diff / n_presentations
+  cue_1_score <- cue_1_squared_diff / n_presentations
+  cue_2_score <- cue_2_squared_diff / n_presentations
+  cue_3_score <- cue_3_squared_diff / n_presentations
+  cue_4_score <- cue_4_squared_diff / n_presentations
   
   return(data.frame(
     VPN = unique(group$VPN),
     blockNumber = unique(group$blockNumber),
     multicue_score = multicue_score,
     singleton_score = singleton_score,
-    one_cue_good_score = one_cue_good_score,
-    one_cue_bad_score = one_cue_bad_score
+    cue_1_score = cue_1_score,
+    cue_2_score = cue_2_score,
+    cue_3_score = cue_3_score,
+    cue_4_score = cue_4_score
   ))
 }
 
-# find best strategies
-
+# Function to find best strategies
 find_best_strategies <- function(strategy_scores_blocks, strategy_scores_VPN) {
   # Helper function to find the strategy with the score closest to zero
   find_best_strategy <- function(scores) {
@@ -149,7 +169,7 @@ find_best_strategies <- function(strategy_scores_blocks, strategy_scores_VPN) {
   
   # Pivot the data longer
   long_strategy_scores_blocks <- strategy_scores_blocks %>%
-    pivot_longer(cols = multicue_score:one_cue_bad_score, names_to = "strategy", values_to = "score")
+    pivot_longer(cols = multicue_score:cue_4_score, names_to = "strategy", values_to = "score")
   
   # Calculate best strategies for each block for each participant
   best_strategies_blocks <- long_strategy_scores_blocks %>%
@@ -162,7 +182,7 @@ find_best_strategies <- function(strategy_scores_blocks, strategy_scores_VPN) {
   
   # Pivot the VPN data longer
   long_strategy_scores_VPN <- strategy_scores_VPN %>%
-    pivot_longer(cols = multicue_score:one_cue_bad_score, names_to = "strategy", values_to = "score")
+    pivot_longer(cols = multicue_score:cue_4_score, names_to = "strategy", values_to = "score")
   
   # Calculate best strategies overall for each participant
   best_strategies_overall <- long_strategy_scores_VPN %>%
