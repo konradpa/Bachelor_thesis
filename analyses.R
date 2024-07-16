@@ -1,62 +1,48 @@
-#Cleanup
+# Cleanup
 rm(list = ls())
 gc()
 
 # Load Functions
 source("functions.R")
 
-#Read the participant information data
+# Read the participant information data
 info_data <- read_excel(info_path)
 
 # Clean participant information data
-
-info_data <- as.data.frame(info_data)
-
 info_data <- info_data %>%
-  clean_names()
+  clean_names() %>%
+  rename(VPN = vpn) %>%
+  as.data.frame()
 
-info_data<- info_data %>% rename(VPN = vpn)
+# Filter out specific groups
+info_data_clean <- info_data %>%
+  filter(group != "NF/stress" & group != "sham/stress")
 
+# analyze info data
+# age distribution
+mean(info_data_clean$age)
 
-str(info_data)
+# gender distribution
+gender_counts <- table(info_data_clean$m_f)
 
-info_data_clean <- info_data[info_data$group != "NF/stress" & info_data$group != "sham/stress", ]
+gender_percentages <- prop.table(gender_counts) * 100
 
-info_data_clean$wpt_random_card_order_map
+gender_percentages
 
-head(info_data)
-head(info_data_clean)
-
-# Read the ETQ data 
+# Read the ETQ data
 ETQ_data <- read_delim(ETQ_path, delim = ";", locale = locale(encoding = "UTF-8"))
 
 # Clean the ETQ data
-
 ETQ_data <- ETQ_data %>%
-  clean_names()
+  clean_names() %>%
+  rename(VPN = id_antwort_id) %>%
+  mutate(VPN = sapply(VPN, format_vpn))
 
+# Add card order and group info to ETQ data
 ETQ_data <- ETQ_data %>%
-  rename(VPN = id_antwort_id)
+  left_join(info_data %>% select(VPN, wpt_random_card_order_map, group), by = "VPN")
 
-ETQ_data <- ETQ_data %>%
-  mutate(VPN = as.character(VPN))
-
-ETQ_data$VPN <- sapply(ETQ_data$VPN, format_vpn)
-
-head(ETQ_data)
-#add card order to ETQ data
-
-ETQ_data <- ETQ_data %>%
-  left_join(info_data %>% select(VPN, "wpt_random_card_order_map"), by = "VPN")
-
-# Add group info o ETQ data
-ETQ_data <- ETQ_data %>%
-  left_join(info_data %>% select(VPN, "group"), by = "VPN")
-
-ETQ_data$group
-            
 # remove stress trials
-
 ETQ_data_clean <- ETQ_data[ETQ_data$group != "NF/stress" & ETQ_data$group != "sham/stress", ]
 
 
@@ -65,7 +51,7 @@ ETQ_data_clean<- analyze_etq_data(ETQ_data_clean)
 
 
 # visualize the overall ETQ scores
-visualize_overall_scores(ETQ_data_clean)
+visualize_ETQ_scores(ETQ_data_clean)
 
 #check for group differnces
 
@@ -77,34 +63,18 @@ mean_accuracy_by_condition_ETQ <- ETQ_data_clean %>%
 t_test_result_ETQ<- t.test(overall_score ~ group, data = ETQ_data_clean)
 
 
-#Read and clean WPT Data
-
+# Read and clean WPT Data
 WPT_file_list <- list.files(WPT_path, pattern = "*.csv", full.names = TRUE)
 
-WPT_data_list <- lapply(WPT_file_list, load_WPT_file)
-
-WPT_data <- bind_rows(WPT_data_list)
-
-WPT_data <- clean_WPT_data(WPT_data)
-
-WPT_data <- WPT_data %>%
-  rename(VPN = n)
-
-WPT_data$VPN <- sapply(WPT_data$VPN, format_vpn)
-
-# remove trials without correct answer or control
-WPT_data$trialNumber <- WPT_data %>%
-  filter(correctness != -1)
-
-# Remove particopants in stress condition
-WPT_data <- WPT_data %>%
-  left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
-
-WPT_data <- WPT_data %>%
+WPT_data <- lapply(WPT_file_list, load_WPT_file) %>%
+  bind_rows() %>%
+  clean_WPT_data() %>%
+  rename(VPN = n) %>%
+  mutate(VPN = sapply(VPN, format_vpn)) %>%
+  filter(correctness != -1) %>%
   left_join(info_data_clean %>% select(VPN, group), by = "VPN") %>%
   filter(!is.na(group))
 
-table(WPT_data$group)
 
 # Remove or handle rows with missing values in stimulusPattern or correctOutcome
 WPT_data <- WPT_data %>%
@@ -121,26 +91,21 @@ WPT_accuracy_VPN <- WPT_data %>%
 
 mean(WPT_accuracy_VPN$accuracy)
 
+
 # add condition to WPT accuracy 
 WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
   left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
 
-
-mean_accuracy_by_condition_WPT <- WPT_accuracy_VPN %>%
-  group_by(group) %>% summarize(mean_accuracy = mean(accuracy, na.rm = TRUE))
-
 # test for differences - **t-test**  WPT performance with groups
-t_test_result_WPT<- t.test(accuracy ~ group, data = WPT_accuracy_VPN)
+t_test_result_WPT_acc<- t.test(accuracy ~ group, data = WPT_accuracy_VPN)
 
-print(t_test_result_WPT)
+print(t_test_result_WPT_acc)
 
-
-## **check for correlation** with ETQ scores
-
+# **check for correlation** beween ETQ scores and WPT accuracy
 WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
   left_join(ETQ_data_clean %>% select(VPN, "overall_score"), by = "VPN")
 
-correlation_result <- cor.test(WPT_accuracy_VPN$accuracy, WPT_accuracy_VPN$overall_score)
+ETQ_WPT_acc_correlation_result <- cor.test(WPT_accuracy_VPN$accuracy, WPT_accuracy_VPN$overall_score)
 
 ggplot(WPT_accuracy_VPN, aes(x = overall_score, y = accuracy)) +
   geom_point() +  # Add points
@@ -150,7 +115,7 @@ ggplot(WPT_accuracy_VPN, aes(x = overall_score, y = accuracy)) +
        y = "Accuracy") +
   theme_minimal()
 
-# per block
+# WPT accuracy per blocks
 
 WPT_accuracy_blocks <- WPT_data %>%
   group_by(blockNumber) %>%
@@ -164,8 +129,89 @@ ggplot(WPT_accuracy_blocks, aes(x = factor(blockNumber), y = accuracy)) +
   labs(title = "Mean accuracy across Blocks", x = "Block Number", y = "Accuracy") +
   theme_minimal()
 
+# **check for correlation** beween blocks and WPT accuracy
+blocks_WPT_acc_correlation_result <- cor.test(WPT_accuracy_blocks$blockNumber, WPT_accuracy_blocks$accuracy)
 
-# clean WPT data columns
+# Calculate accuracy for each block between groups
+WPT_accuracy_VPN_blocks <- WPT_data %>%
+  group_by(VPN, blockNumber) %>%
+  summarise(accuracy = mean(correctness)) %>%
+  pivot_wider(names_from = blockNumber, values_from = accuracy, names_prefix = "block_")
+
+WPT_accuracy_VPN_blocks <- WPT_accuracy_VPN_blocks %>%
+  mutate(group = as.factor(group))
+
+WPT_accuracy_VPN_blocks  <- WPT_accuracy_VPN_blocks  %>%
+  left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
+
+# Perform t-tests for each block
+t_test_result_WPT_acc_blocks <- WPT_accuracy_VPN_blocks %>%
+  select(VPN, block_1, block_2, block_3, block_4, group) %>%
+  pivot_longer(cols = starts_with("block_"), names_to = "block", values_to = "accuracy") %>%
+  group_by(block) %>%
+  summarise(
+    t_test = list(t.test(accuracy ~ group, data = cur_data()))
+  )
+
+# Extract detailed t-test results
+t_test_result_WPT_acc_blocks <- t_test_result_WPT_acc_blocks %>%
+  mutate(
+    t_statistic = sapply(t_test, function(x) x$statistic),
+    p_value = sapply(t_test, function(x) x$p.value),
+    conf_low = sapply(t_test, function(x) x$conf.int[1]),
+    conf_high = sapply(t_test, function(x) x$conf.int[2]),
+    mean_group1 = sapply(t_test, function(x) x$estimate[1]),
+    mean_group2 = sapply(t_test, function(x) x$estimate[2]),
+    group1 = group_levels[1],
+    group2 = group_levels[2]
+  )
+
+# Print the detailed t-test results
+print(t_test_result_WPT_acc_blocks)
+
+# visualize WPT performance between groups in blocks
+mean_accuracy_by_block_group <- WPT_accuracy_VPN_blocks %>%
+  pivot_longer(cols = starts_with("block_"), names_to = "block", values_to = "accuracy") %>%
+  group_by(block, group) %>%
+  summarise(mean_accuracy = mean(accuracy, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(mean_accuracy_by_block_group, aes(x = block, y = mean_accuracy, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(title = "Mean Accuracy by Block and Group",
+       x = "Block",
+       y = "Mean Accuracy") +
+  theme_minimal()
+
+# check for differnces between blocks in each group
+long_WPT_data <- WPT_accuracy_VPN_blocks %>%
+  pivot_longer(cols = starts_with("block_"), names_to = "block", values_to = "accuracy")
+
+# Perform repeated measures ANOVA for each group separately
+anova_results_WPT_acc_blocks <- long_WPT_data %>%
+  group_by(group) %>%
+  do(tidy(aov(accuracy ~ block + Error(VPN/block), data = .))) %>%
+  ungroup()
+
+# Print ANOVA results
+anova_results_WPT_acc_blocks %>%
+  mutate(summary = map(anova, summary)) %>%
+  select(group, summary) %>%
+  unnest(cols = summary)
+
+# Perform pairwise comparisons using emmeans
+pairwise_results <- long_WPT_data %>%
+  group_by(group) %>%
+  do(emmeans = emmeans(aov(accuracy ~ block + Error(VPN/block), data = .), pairwise ~ block))
+
+# Print pairwise comparison results
+pairwise_results %>%
+  mutate(summary = map(emmeans, summary)) %>%
+  select(group, summary) %>%
+  unnest(cols = summary)
+
+
+# cleanup WPT data columns
 
 WPT_data_filtered <- WPT_data %>%
   select(VPN, trialNumber, blockNumber, response, stimulusPattern, correctOutcome, correctness, group)
@@ -195,21 +241,21 @@ WPT_data_filtered <- WPT_data_filtered %>%
 
 # Calculate Strategies used
 
-
 # Add strategies 
 WPT_data_filtered <- WPT_data_filtered %>%
-  mutate(strategy_multicue = correctOutcome,
-         strategy_singleton = sapply(stimulusPattern, determine_strategy_singleton),
-         one_cue_good = sapply(stimulusPattern, determine_one_cue_good),
-         one_cue_bad = sapply(stimulusPattern, determine_one_cue_bad))
+  mutate(
+    strategy_multicue = correctOutcome,
+    strategy_singleton = sapply(stimulusPattern, determine_strategy_singleton),
+    cue_1 = sapply(stimulusPattern, determine_cue_1),
+    cue_2 = sapply(stimulusPattern, determine_cue_2),
+    cue_3 = sapply(stimulusPattern, determine_cue_3),
+    cue_4 = sapply(stimulusPattern, determine_cue_4)
+  )
 
-
-# Display the result
 
 head(WPT_data_filtered)
 
-
-# show stretegy mactch
+# show strategy mactch percentage
 percentage_matches <- calculate_percentage_match(WPT_data_filtered)
 print(percentage_matches)
 
@@ -226,12 +272,22 @@ strategy_scores_blocks <- WPT_data_filtered %>%
 print(strategy_scores_VPN)
 print(strategy_scores_blocks)
 
-str(strategy_scores_VPN)
-str(strategy_scores_blocks)
+# Create a new data frame for  scores of blocks +VPN  
+overall_scores <- strategy_scores_VPN %>%
+  mutate(blockNumber = 0)
 
+overall_scores <- overall_scores %>%
+  select(blockNumber, VPN, multicue_score, singleton_score, cue_1_score, cue_2_score, cue_3_score, cue_4_score)
+
+combined_scores <- bind_rows(strategy_scores_blocks, overall_scores)
+
+combined_scores <- combined_scores %>%
+  arrange(VPN, blockNumber)
+
+print(combined_scores)
+
+# add strategy results  
 strategy_results <- find_best_strategies(strategy_scores_blocks, strategy_scores_VPN)
-
-# add group info
 
 strategy_results <- strategy_results %>%
   left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")

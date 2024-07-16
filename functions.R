@@ -4,7 +4,10 @@ library(janitor)
 library(ggplot2)
 library(readxl)
 library(tidyr)
-
+if (!require(emmeans)) install.packages("emmeans")
+if (!require(broom)) install.packages("broom")
+library(emmeans)
+library(broom)  
 
 
 ETQ_path <- "data/data_24.05/LimeSurveyResults_ExplicitTaskKnowledge_03052024.txt.csv"
@@ -124,7 +127,7 @@ analyze_etq_data <- function(ETQ_data) {
   return(ETQ_data)
 }
 
-visualize_overall_scores <- function(ETQ_data) {
+visualize_ETQ_scores <- function(ETQ_data) {
   ggplot(ETQ_data, aes(x = overall_score)) +
     geom_histogram(binwidth = 1, fill = "blue", color = "black", alpha = 0.7) +
     labs(title = "Distribution of Overall Scores",
