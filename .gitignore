@@ -3,3 +3,7 @@
 .RData
 .Ruserdata
 .DS_Store
+Sterre_scripts/
+WPT_sterre.R
+WPT_strategies_pseudocode.Rmd
+notes.qmd
