@@ -1,197 +1,113 @@
 library(dplyr)
+library(readr)
+library(tidyr)
+library(writexl)
 
-# Define a function to rearrange the stimulus pattern based on the order
-rearrange_pattern <- function(pattern, order) {
-  if (is.na(order)) {
-    return(pattern)
+# Define Ideal Strategies
+define_ideal_strategies <- function() {
+  idealStrategy <- list(
+    Cue1 = c(1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0),
+    Cue2 = c(1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0),
+    Cue3 = c(1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0),
+    Cue4 = c(1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0),
+    Singleton = c(0.5, 1, 0.5, 0.5, 0.5, 1, 0.5, 0.5, 0, 0.5, 0.5, 0.5, 0, 0.5),
+    MultiCueMax = c(1, 1, 1, 1, 1, 1, 0.5, 0.5, 0, 0, 0, 0, 0, 0),
+    MultiCueMatch = c(0.889, 0.857, 0.833, 0.75, 0.667, 0.625, 0.5, 0.5, 0.375, 0.333, 0.25, 0.167, 0.143, 0.111)
+  )
+  return(idealStrategy)
+}
+
+map_stimulus_pattern <- function(pattern) {
+  pattern <- gsub(" ", "", pattern)  # Remove spaces
+  binary_patterns <- c("1110", "1100", "1011", "1001", "0111", "0101", "0010", "0001", "0000", "1111", "1101", "1010", "0110", "0100")
+  return(match(pattern, binary_patterns))
+}
+
+compute_strategy_coefficients <- function(data, idealStrategy) {
+  strategyCount <- length(idealStrategy)
+  trialSize <- nrow(data)
+  blockCount <- 7
+  block <- floor(trialSize / 4)
+  blockTrials <- list(
+    c(1, block),
+    c(block + 1, 2 * block),
+    c(2 * block + 1, 3 * block),
+    c(3 * block + 1, trialSize),
+    c(1, 2 * block),
+    c(2 * block + 1, trialSize),
+    c(1, trialSize)
+  )
+  
+  strategyCoefficientOutput <- matrix(NA, nrow = strategyCount, ncol = blockCount)
+  
+  for (blockIndex in 1:blockCount) {
+    subset_data <- data[blockTrials[[blockIndex]][1]:blockTrials[[blockIndex]][2], ]
+    sumRespond <- rep(0, 14)
+    sumPresentationFreq <- rep(0, 14)
+    sumMiss <- rep(0, 14)
+    
+    for (trial in seq_len(nrow(subset_data))) {
+      condition <- map_stimulus_pattern(subset_data$stimulusPattern[trial])
+      response <- subset_data$response[trial]
+      
+      if (!is.na(condition) && condition >= 1 && condition <= 14) {
+        if (response == "sun") {
+          sumRespond[condition] <- sumRespond[condition] + 1
+        }
+        
+        sumPresentationFreq[condition] <- sumPresentationFreq[condition] + 1
+        if (is.na(response) || response %in% c("", "miss", "NA")) {
+          sumMiss[condition] <- sumMiss[condition] + 1
+        }
+      }
+    }
+    
+    print(list(sumRespond = sumRespond, sumPresentationFreq = sumPresentationFreq, sumMiss = sumMiss))
+    
+    for (strategy in seq_len(strategyCount)) {
+      strategy_values <- idealStrategy[[strategy]]
+      
+      if (length(sumRespond) == length(strategy_values) && length(sumPresentationFreq) == length(sumMiss)) {
+        correctResponses <- sumRespond * strategy_values
+        totalResponses <- sumPresentationFreq - sumMiss
+        
+        if (all(!is.na(totalResponses)) && sum(totalResponses) > 0) {
+          strategyCoefficientOutput[strategy, blockIndex] <- sum(correctResponses, na.rm = TRUE) / sum(totalResponses, na.rm = TRUE)
+        } else {
+          strategyCoefficientOutput[strategy, blockIndex] <- NA
+        }
+      } else {
+        strategyCoefficientOutput[strategy, blockIndex] <- NA
+      }
+    }
   }
   
-  # Split the pattern into individual characters
-  pattern_split <- strsplit(pattern, " ")[[1]]
-  
-  # Convert the order to numeric indices
-  order_indices <- as.numeric(strsplit(order, "")[[1]])
-  
-  # Rearrange the pattern based on the order
-  rearranged_pattern <- pattern_split[order_indices]
-  
-  # Join the rearranged pattern back into a string
-  rearranged_pattern_str <- paste(rearranged_pattern, collapse = " ")
-  
-  return(rearranged_pattern_str)
+  return(strategyCoefficientOutput)
 }
 
-# "simulate" results for speific strategy 
-## Function to determine strategy_singleton based on stimulusPattern
-determine_strategy_singleton <- function(stimulus_pattern) {
-  # Split the stimulus pattern into individual characters
-  pattern <- strsplit(stimulus_pattern, " ")[[1]]
+# Main Function
+compute_strategy <- function(data, folderSubj, settings) {
+  idealStrategy <- define_ideal_strategies()
+  strategyCoefficientOutput <- compute_strategy_coefficients(data, idealStrategy)
   
-  # Count the number of "1"s in the pattern
-  count_ones <- sum(as.numeric(pattern))
+  strategyHeader <- c("Cue1", "Cue2", "Cue3", "Cue4", "Singleton", "MultiCueMax", "MultiCueMatch")
+  RESULT <- data.frame(
+    Strategie = strategyHeader,
+    K_1_4 = strategyCoefficientOutput[, 1],
+    K_2_4 = strategyCoefficientOutput[, 2],
+    K_3_4 = strategyCoefficientOutput[, 3],
+    K_4_4 = strategyCoefficientOutput[, 4],
+    K_1_2 = strategyCoefficientOutput[, 5],
+    K_2_2 = strategyCoefficientOutput[, 6],
+    K_1_1 = strategyCoefficientOutput[, 7]
+  )
   
-  if (count_ones > 1) {
-    # If more than one "1", assign a random value of "rain" or "sun"
-    return(sample(c("rain", "sun"), 1))
-  } else if (pattern[3] == "1" || pattern[4] == "1") {
-    # If there's only one "1" and it's in the third or fourth place, assign "rain"
-    return("rain")
-  } else if (pattern[1] == "1" || pattern[2] == "1") {
-    # If there's only one "1" and it's in the first or second place, assign "sun"
-    return("sun")
-  } else {
-    # Default case, if no specific conditions are met (should not occur based on given rules)
-    return(NA)
-  }
+  print(RESULT)
+  
+  # Save data to Excel file
+  filename <- paste0(settings$dir_WPT_strategies, "/VP_", folderSubj, "_strategy.xlsx")
+  write_xlsx(RESULT, filename)
+  
+  return(RESULT)
 }
 
-# Functions to determine cue-based strategies
-determine_cue_1 <- function(stimulus_pattern) {
-  pattern <- strsplit(stimulus_pattern, " ")[[1]]
-  if (pattern[1] == "1") {
-    return("sun")
-  } else {
-    return("rain")
-  }
-}
-
-determine_cue_2 <- function(stimulus_pattern) {
-  pattern <- strsplit(stimulus_pattern, " ")[[1]]
-  if (pattern[2] == "1") {
-    return("sun")
-  } else {
-    return("rain")
-  }
-}
-
-determine_cue_3 <- function(stimulus_pattern) {
-  pattern <- strsplit(stimulus_pattern, " ")[[1]]
-  if (pattern[3] == "1") {
-    return("rain")
-  } else {
-    return("sun")
-  }
-}
-
-determine_cue_4 <- function(stimulus_pattern) {
-  pattern <- strsplit(stimulus_pattern, " ")[[1]]
-  if (pattern[4] == "1") {
-    return("rain")
-  } else {
-    return("sun")
-  }
-}
-
-calculate_percentage_match <- function(data) {
-  data %>%
-    group_by(VPN) %>%
-    summarise(
-      multicue_match = mean(response == strategy_multicue) * 100,
-      singleton_match = mean(response == strategy_singleton) * 100,
-      cue_1_match = mean(response == cue_1, na.rm = TRUE) * 100,
-      cue_2_match = mean(response == cue_2, na.rm = TRUE) * 100,
-      cue_3_match = mean(response == cue_3, na.rm = TRUE) * 100,
-      cue_4_match = mean(response == cue_4, na.rm = TRUE) * 100
-    )
-}
-
-# Function to calculate the normalized score for each strategy
-calculate_normalized_scores <- function(group) {
-  n_presentations <- nrow(group)
-  
-  # Calculate the squared differences for each trial
-  multicue_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$strategy_multicue == "sun", 1, 0))^2)
-  singleton_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$strategy_singleton == "sun", 1, 0))^2)
-  cue_1_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_1 == "sun", 1, 0))^2, na.rm = TRUE)
-  cue_2_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_2 == "sun", 1, 0))^2, na.rm = TRUE)
-  cue_3_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_3 == "rain", 1, 0))^2, na.rm = TRUE)
-  cue_4_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_4 == "rain", 1, 0))^2, na.rm = TRUE)
-  
-  # Normalize the scores
-  multicue_score <- multicue_squared_diff / n_presentations
-  singleton_score <- singleton_squared_diff / n_presentations
-  cue_1_score <- cue_1_squared_diff / n_presentations
-  cue_2_score <- cue_2_squared_diff / n_presentations
-  cue_3_score <- cue_3_squared_diff / n_presentations
-  cue_4_score <- cue_4_squared_diff / n_presentations
-  
-  return(data.frame(
-    VPN = unique(group$VPN),
-    multicue_score = multicue_score,
-    singleton_score = singleton_score,
-    cue_1_score = cue_1_score,
-    cue_2_score = cue_2_score,
-    cue_3_score = cue_3_score,
-    cue_4_score = cue_4_score
-  ))
-}
-
-# Define the function to calculate normalized scores for a single group (participant and block)
-calculate_normalized_scores_blocks <- function(group) {
-  n_presentations <- nrow(group)
-  
-  # Calculate the squared differences for each trial
-  multicue_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$strategy_multicue == "sun", 1, 0))^2)
-  singleton_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$strategy_singleton == "sun", 1, 0))^2)
-  cue_1_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_1 == "sun", 1, 0))^2, na.rm = TRUE)
-  cue_2_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_2 == "sun", 1, 0))^2, na.rm = TRUE)
-  cue_3_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_3 == "rain", 1, 0))^2, na.rm = TRUE)
-  cue_4_squared_diff <- sum((ifelse(group$response == "sun", 1, 0) - ifelse(group$cue_4 == "rain", 1, 0))^2, na.rm = TRUE)
-  
-  # Normalize the scores
-  multicue_score <- multicue_squared_diff / n_presentations
-  singleton_score <- singleton_squared_diff / n_presentations
-  cue_1_score <- cue_1_squared_diff / n_presentations
-  cue_2_score <- cue_2_squared_diff / n_presentations
-  cue_3_score <- cue_3_squared_diff / n_presentations
-  cue_4_score <- cue_4_squared_diff / n_presentations
-  
-  return(data.frame(
-    VPN = unique(group$VPN),
-    blockNumber = unique(group$blockNumber),
-    multicue_score = multicue_score,
-    singleton_score = singleton_score,
-    cue_1_score = cue_1_score,
-    cue_2_score = cue_2_score,
-    cue_3_score = cue_3_score,
-    cue_4_score = cue_4_score
-  ))
-}
-
-# Function to find best strategies
-find_best_strategies <- function(strategy_scores_blocks, strategy_scores_VPN) {
-  # Helper function to find the strategy with the score closest to zero
-  find_best_strategy <- function(scores) {
-    strategies <- names(scores)
-    best_strategy <- strategies[which.min(abs(scores))]
-    return(best_strategy)
-  }
-  
-  # Pivot the data longer
-  long_strategy_scores_blocks <- strategy_scores_blocks %>%
-    pivot_longer(cols = multicue_score:cue_4_score, names_to = "strategy", values_to = "score")
-  
-  # Calculate best strategies for each block for each participant
-  best_strategies_blocks <- long_strategy_scores_blocks %>%
-    group_by(VPN, blockNumber) %>%
-    summarize(best_strategy_block = strategy[which.min(abs(score))], .groups = 'drop')
-  
-  # Pivot back to wide format
-  best_strategies_blocks_wide <- best_strategies_blocks %>%
-    pivot_wider(names_from = blockNumber, values_from = best_strategy_block, names_prefix = "best_strategy_block_")
-  
-  # Pivot the VPN data longer
-  long_strategy_scores_VPN <- strategy_scores_VPN %>%
-    pivot_longer(cols = multicue_score:cue_4_score, names_to = "strategy", values_to = "score")
-  
-  # Calculate best strategies overall for each participant
-  best_strategies_overall <- long_strategy_scores_VPN %>%
-    group_by(VPN) %>%
-    summarize(best_strategy_overall = strategy[which.min(abs(score))], .groups = 'drop')
-  
-  # Combine results
-  result <- best_strategies_blocks_wide %>%
-    left_join(best_strategies_overall, by = "VPN")
-  
-  return(result)
-}

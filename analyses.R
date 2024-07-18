@@ -239,116 +239,15 @@ WPT_data_filtered$wpt_random_card_order_map <- as.character(WPT_data_filtered$wp
 WPT_data_filtered <- WPT_data_filtered %>%
   mutate(stimulusPattern = mapply(rearrange_pattern, stimulusPattern, wpt_random_card_order_map))
 
-# Calculate Strategies used
+# Calculate Strategies used - Sterre way
 
-# Add strategies 
-WPT_data_filtered <- WPT_data_filtered %>%
-  mutate(
-    strategy_multicue = correctOutcome,
-    strategy_singleton = sapply(stimulusPattern, determine_strategy_singleton),
-    cue_1 = sapply(stimulusPattern, determine_cue_1),
-    cue_2 = sapply(stimulusPattern, determine_cue_2),
-    cue_3 = sapply(stimulusPattern, determine_cue_3),
-    cue_4 = sapply(stimulusPattern, determine_cue_4)
-  )
+wpt_strats_settings <- list(dir_WPT_strategies = "/Users/test/Desktop/Bachelorarbeit/BA_analyses/wpt_strats_results")
+wpt_strats_result <- compute_strategy(WPT_data_filtered, "001", wpt_strats_settings)
 
 
-head(WPT_data_filtered)
 
-# show strategy mactch percentage
-percentage_matches <- calculate_percentage_match(WPT_data_filtered)
-print(percentage_matches)
 
-## normalized scores for particpants
-strategy_scores_VPN <- WPT_data_filtered %>%
-  group_by(VPN) %>%
-  do(calculate_normalized_scores(.))
 
-## normalized scores for particpants + blocks
-strategy_scores_blocks <- WPT_data_filtered %>%
-  group_by(VPN, blockNumber) %>%
-  do(calculate_normalized_scores(.))
-
-print(strategy_scores_VPN)
-print(strategy_scores_blocks)
-
-# Create a new data frame for  scores of blocks +VPN  
-overall_scores <- strategy_scores_VPN %>%
-  mutate(blockNumber = 0)
-
-overall_scores <- overall_scores %>%
-  select(blockNumber, VPN, multicue_score, singleton_score, cue_1_score, cue_2_score, cue_3_score, cue_4_score)
-
-combined_scores <- bind_rows(strategy_scores_blocks, overall_scores)
-
-combined_scores <- combined_scores %>%
-  arrange(VPN, blockNumber)
-
-print(combined_scores)
-
-# add strategy results  
-strategy_results <- find_best_strategies(strategy_scores_blocks, strategy_scores_VPN)
-
-strategy_results <- strategy_results %>%
-  left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
-
-print(strategy_results)
-
-## check for group differnces in straetegy use **chi square test**
-
-# Define the columns to test
-strategy_columns <- c("best_strategy_block_1", "best_strategy_block_2", "best_strategy_block_3", "best_strategy_block_4", "best_strategy_overall")
-
-# Function to perform chi-square test and return results
-perform_chi_square_test <- function(data, column, group_column) {
-  contingency_table <- table(data[[column]], data[[group_column]])
-  chisq_test <- chisq.test(contingency_table)
-  return(list(column = column, chi_square_test = chisq_test))
-}
-
-# Perform chi-square test for each strategy column and store results
-chi_square_results <- lapply(strategy_columns, perform_chi_square_test, data = strategy_results, group_column = "group")
-
-# Print the results
-for (result in chi_square_results) {
-  cat("Results for column:", result$column, "\n")
-  print(result$chi_square_test)
-  cat("\n")
-}
-
-# Perform the chi-square test
-chi_square_test <- chisq.test(contingency_table)
-
-# Print the result
-print(chi_square_test)
-
-# Plotting
-
-# Reshape the data to long format for easier plotting
-# Assuming your dataframe `final_results` has the correct column names
-strategy_results_long <- strategy_results %>%
-  pivot_longer(cols = starts_with("best_strategy_block"), names_to = "block", values_to = "strategy") %>%
-  mutate(block = factor(block, levels = c("best_strategy_block_1", "best_strategy_block_2", "best_strategy_block_3", "best_strategy_block_4", "best_strategy_overall"),
-                        labels = c("Block 1", "Block 2", "Block 3", "Block 4", "Overall")))
-
-# Create bar plots for each block and overall
-ggplot(strategy_results_long, aes(x = strategy, fill = group)) +
-  geom_bar(position = "dodge") +
-  facet_wrap(~ block, scales = "free") +
-  labs(title = "Number of Participants Using Each Strategy", x = "Strategy", y = "Count") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# Use the overall strategy column for the bar plot
-strategy_results_long_overall <- strategy_results_long %>%
-  select(VPN, best_strategy_overall, group)
-
-# Create the bar plot for the overall strategy
-ggplot(strategy_results_long_overall, aes(x = best_strategy_overall, fill = group)) +
-  geom_bar(position = "dodge") +
-  labs(title = "Number of Participants Using Each Strategy (Overall)", x = "Strategy", y = "Count") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # add feedback values
 library(R.matlab)
