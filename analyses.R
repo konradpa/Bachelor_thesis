@@ -227,28 +227,6 @@ WPT_data_filtered <- WPT_data_filtered %>%
 
 table(WPT_data_filtered$wpt_random_card_order_map)
 
-
-# change stimulusPattern according to card order
-
-source("WPT_strategy_analysis.R")
-
-WPT_data_filtered$stimulusPattern <- as.character(WPT_data_filtered$stimulusPattern)
-WPT_data_filtered$wpt_random_card_order_map <- as.character(WPT_data_filtered$wpt_random_card_order_map)
-
-
-WPT_data_filtered <- WPT_data_filtered %>%
-  mutate(stimulusPattern = mapply(rearrange_pattern, stimulusPattern, wpt_random_card_order_map))
-
-# Calculate Strategies used - Sterre way
-
-wpt_strats_settings <- list(dir_WPT_strategies = "/Users/test/Desktop/Bachelorarbeit/BA_analyses/wpt_strats_results")
-wpt_strats_result <- compute_strategy(WPT_data_filtered, "001", wpt_strats_settings)
-
-
-
-
-
-
 # add feedback values
 library(R.matlab)
 
