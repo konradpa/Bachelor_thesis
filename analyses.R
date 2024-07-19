@@ -8,6 +8,11 @@ source("functions.R")
 # Read the participant information data
 info_data <- read_excel(info_path)
 
+# get general subject info
+group1_subjects <- info_data$VP[info_data_clean$group == "NF/control" | info_data_clean$group == "NF/stress"]
+group2_subjects <- info_data$VP[info_data_clean$group == "sham/control" | info_data_clean$group == "sham/stress"]
+
+
 # Clean participant information data
 info_data <- info_data %>%
   clean_names() %>%
@@ -60,6 +65,15 @@ mean_accuracy_by_condition_ETQ <- ETQ_data_clean %>%
 
 
 ## **t test**  Explicit task knowledge
+
+# Normality of the data
+shapiro.test(ETQ_data_clean$overall_score[ETQ_data_clean$group == "NF/control"])
+shapiro.test(ETQ_data_clean$overall_score[ETQ_data_clean$group == "sham/control"])
+
+# Homogeneity of variances
+leveneTest(overall_score ~ group, data = ETQ_data_clean)
+
+# t test
 t_test_result_ETQ<- t.test(overall_score ~ group, data = ETQ_data_clean)
 
 
@@ -97,6 +111,14 @@ WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
   left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
 
 # test for differences - **t-test**  WPT performance with groups
+# Normality of the data
+shapiro.test(WPT_accuracy_VPN$accuracy[WPT_accuracy_VPN$group == "NF/control"])
+shapiro.test(WPT_accuracy_VPN$accuracy[WPT_accuracy_VPN$group == "sham/control"])
+
+# Homogeneity of variances
+leveneTest(accuracy ~ group, data = WPT_accuracy_VPN)
+
+# t test
 t_test_result_WPT_acc<- t.test(accuracy ~ group, data = WPT_accuracy_VPN)
 
 print(t_test_result_WPT_acc)
@@ -138,11 +160,13 @@ WPT_accuracy_VPN_blocks <- WPT_data %>%
   summarise(accuracy = mean(correctness)) %>%
   pivot_wider(names_from = blockNumber, values_from = accuracy, names_prefix = "block_")
 
+WPT_accuracy_VPN_blocks  <- WPT_accuracy_VPN_blocks  %>%
+  left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
+
+
 WPT_accuracy_VPN_blocks <- WPT_accuracy_VPN_blocks %>%
   mutate(group = as.factor(group))
 
-WPT_accuracy_VPN_blocks  <- WPT_accuracy_VPN_blocks  %>%
-  left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
 
 # Perform t-tests for each block
 t_test_result_WPT_acc_blocks <- WPT_accuracy_VPN_blocks %>%
@@ -151,22 +175,15 @@ t_test_result_WPT_acc_blocks <- WPT_accuracy_VPN_blocks %>%
   group_by(block) %>%
   summarise(
     t_test = list(t.test(accuracy ~ group, data = cur_data()))
-  )
-
-# Extract detailed t-test results
-t_test_result_WPT_acc_blocks <- t_test_result_WPT_acc_blocks %>%
+  ) %>%
   mutate(
-    t_statistic = sapply(t_test, function(x) x$statistic),
-    p_value = sapply(t_test, function(x) x$p.value),
-    conf_low = sapply(t_test, function(x) x$conf.int[1]),
-    conf_high = sapply(t_test, function(x) x$conf.int[2]),
-    mean_group1 = sapply(t_test, function(x) x$estimate[1]),
-    mean_group2 = sapply(t_test, function(x) x$estimate[2]),
-    group1 = group_levels[1],
-    group2 = group_levels[2]
-  )
+    p_value = map_dbl(t_test, ~ .x$p.value),
+    t_statistic = map_dbl(t_test, ~ .x$statistic),
+    df = map_dbl(t_test, ~ .x$parameter),
+    mean_diff = map_dbl(t_test, ~ .x$estimate[1] - .x$estimate[2])
+  ) %>%
+  select(block, p_value, t_statistic, df, mean_diff)
 
-# Print the detailed t-test results
 print(t_test_result_WPT_acc_blocks)
 
 # visualize WPT performance between groups in blocks
@@ -187,101 +204,25 @@ ggplot(mean_accuracy_by_block_group, aes(x = block, y = mean_accuracy, fill = gr
 long_WPT_data <- WPT_accuracy_VPN_blocks %>%
   pivot_longer(cols = starts_with("block_"), names_to = "block", values_to = "accuracy")
 
-# Perform repeated measures ANOVA for each group separately
-anova_results_WPT_acc_blocks <- long_WPT_data %>%
-  group_by(group) %>%
-  do(tidy(aov(accuracy ~ block + Error(VPN/block), data = .))) %>%
-  ungroup()
-
-# Print ANOVA results
-anova_results_WPT_acc_blocks %>%
-  mutate(summary = map(anova, summary)) %>%
-  select(group, summary) %>%
-  unnest(cols = summary)
-
-# Perform pairwise comparisons using emmeans
-pairwise_results <- long_WPT_data %>%
-  group_by(group) %>%
-  do(emmeans = emmeans(aov(accuracy ~ block + Error(VPN/block), data = .), pairwise ~ block))
-
-# Print pairwise comparison results
-pairwise_results %>%
-  mutate(summary = map(emmeans, summary)) %>%
-  select(group, summary) %>%
-  unnest(cols = summary)
-
-
-# cleanup WPT data columns
-
-WPT_data_filtered <- WPT_data %>%
-  select(VPN, trialNumber, blockNumber, response, stimulusPattern, correctOutcome, correctness, group)
-
-# add WPT order
-
-info_data_clean_subset <- info_data_clean %>%
-  select(VPN, wpt_random_card_order_map)
-
-WPT_data_filtered <- WPT_data_filtered %>%
-  left_join(info_data_clean_subset, by = "VPN", copy = TRUE)
-
-
-table(WPT_data_filtered$wpt_random_card_order_map)
-
-
-# change stimulusPattern according to card order
-
-source("WPT_strategy_analysis.R")
-
-WPT_data_filtered$stimulusPattern <- as.character(WPT_data_filtered$stimulusPattern)
-WPT_data_filtered$wpt_random_card_order_map <- as.character(WPT_data_filtered$wpt_random_card_order_map)
-
-
-WPT_data_filtered <- WPT_data_filtered %>%
-  mutate(stimulusPattern = mapply(rearrange_pattern, stimulusPattern, wpt_random_card_order_map))
-
-# Calculate Strategies used - Sterre way
-
-wpt_strats_settings <- list(dir_WPT_strategies = "/Users/test/Desktop/Bachelorarbeit/BA_analyses/wpt_strats_results")
-wpt_strats_result <- compute_strategy(WPT_data_filtered, "001", wpt_strats_settings)
-
-
-
-
-
-
-# add feedback values
-library(R.matlab)
-
-extract_values <- function(file_path) {
-  data <- readMat(file_path)
-  values <- NA  # Default to NA if vectNFBs.PSC is not present
-  
-  if (!is.null(data$vectNFBs.PSC)) {
-    values <- data$vectNFBs.PSC[1, ]  # Extract all values
-  }
-  return(values)
-}
-
-# Define the file paths
-file_paths <- sprintf("Data/NF_values_11.06/NFBs_subj_%03d.mat", 1:33)
+# analyzte reward feedback
 
 # Initialize a list to store the extracted values
-extracted_values <- list()
+feedback_values <- list()
 
 # Loop through the file paths and extract the required values
 for (i in 1:33) {
-  if (file.exists(file_paths[i])) {
-    extracted_values[[i]] <- extract_values(file_paths[i])
+  if (file.exists(feedback_path[i])) {
+    feedback_values[[i]] <- extract_values(feedback_path[i])
   } else {
-    extracted_values[[i]] <- NA  # Handle missing files by filling with NA
+    feedback_values[[i]] <- NA  # Handle missing files by filling with NA
   }
 }
 
 # Determine the maximum length of extracted values
-max_length <- max(sapply(extracted_values, function(x) ifelse(is.null(x) || all(is.na(x)), 0, length(x))))
+max_length <- max(sapply(feedback_values, function(x) ifelse(is.null(x) || all(is.na(x)), 0, length(x))))
 
 # Pad shorter vectors with NA to ensure all have the same length
-padded_values <- lapply(extracted_values, function(x) {
+padded_feedback_values <- lapply(feedback_values, function(x) {
   if (is.null(x) || all(is.na(x))) {
     return(rep(NA, max_length))
   } else {
@@ -290,17 +231,17 @@ padded_values <- lapply(extracted_values, function(x) {
 })
 
 # Convert the list to a data frame
-extracted_df <- do.call(rbind, padded_values)
-colnames(extracted_df) <- paste0("V", 1:ncol(extracted_df))
-extracted_df <- as.data.frame(extracted_df)
+feedback_values_df <- do.call(rbind, padded_feedback_values)
+colnames(feedback_values_df) <- paste0("V", 1:ncol(feedback_values_df))
+feedback_values_df <- as.data.frame(feedback_values_df)
 
 # Add a column for the VPN number
-extracted_df$VPN <- sprintf("VP_%03d", 1:33)
+feedback_values_df$VPN <- sprintf("VP_%03d", 1:33)
 
 # Calculate the average of the extracted values for each participant
-extracted_df$average <- rowMeans(extracted_df[, 1:max_length], na.rm = TRUE)
+feedback_values_df$average <- rowMeans(feedback_values_df[, 1:max_length], na.rm = TRUE)
 
-extracted_df$average_last_5 <- apply(extracted_df[, 1:max_length], 1, function(row) {
+feedback_values_df$average_last_5 <- apply(feedback_values_df[, 1:max_length], 1, function(row) {
   last_5 <- tail(na.omit(row), 5)
   if (length(last_5) < 5) {
     return(NA)
@@ -311,7 +252,7 @@ extracted_df$average_last_5 <- apply(extracted_df[, 1:max_length], 1, function(r
 
 
 # Print the filtered data frame
-print(extracted_df)
+print(feedback_values_df)
 
 ## add to other data
 

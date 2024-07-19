@@ -4,10 +4,14 @@ library(janitor)
 library(ggplot2)
 library(readxl)
 library(tidyr)
-if (!require(emmeans)) install.packages("emmeans")
-if (!require(broom)) install.packages("broom")
 library(emmeans)
 library(broom)  
+library(car)
+library(purrr)  
+library(R.matlab)
+
+
+
 
 
 ETQ_path <- "data/data_24.05/LimeSurveyResults_ExplicitTaskKnowledge_03052024.txt.csv"
@@ -15,6 +19,9 @@ ETQ_path <- "data/data_24.05/LimeSurveyResults_ExplicitTaskKnowledge_03052024.tx
 info_path <- "data/data_24.05/VP_information_03052024.xlsx"
 
 WPT_path <- "data/data_24.05/WPT_results/Results/"
+
+feedback_path <- sprintf("Data/NF_values_11.06/NFBs_subj_%03d.mat", 1:33)
+
 
 format_vpn <- function(vpn) {
   paste0("VP_", sprintf("%03d", as.numeric(vpn)))
@@ -162,4 +169,15 @@ clean_WPT_data <- function(df) {
     filter(trialType != "reactivation" & trialType != "control") %>%
     drop_na(trialNumber, blockNumber, trialType, stimulusPattern, pSun, correctOutcome, actualOutcome, response, correctness, reactionTime)
   return(df_clean)
+}
+
+# add feedback values
+extract_values <- function(feedback_path) {
+  data <- readMat(feedback_path)
+  values <- NA  # Default to NA if vectNFBs.PSC is not present
+  
+  if (!is.null(data$vectNFBs.PSC)) {
+    values <- data$vectNFBs.PSC[1, ]  # Extract all values
+  }
+  return(values)
 }
