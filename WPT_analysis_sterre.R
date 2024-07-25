@@ -6,8 +6,8 @@ library(tidyr)
 library(ggplot2)
 
 # Define the directories
-dir_WPT_log <- "/Users/test/Desktop/Bachelorarbeit/BA_analyses/data/data_24.05/WPT_results/Results"
-output_dir <- "/Users/test/Desktop/Bachelorarbeit/BA_analyses/data/data_24.05/WPT_results/Data/Behavior/WPT"
+dir_WPT_log <- "/Users/test/Desktop/Bachelorarbeit/BA_analyses/Data/WPT_final/Results"
+output_dir <- "/Users/test/Desktop/Bachelorarbeit/BA_analyses/Data/WPT_final/strategy_results"
 dir_WPT_strategies <- file.path(output_dir, "strategies")
 
 # Ensure the output and strategies directories exist
@@ -54,12 +54,6 @@ for (file_path in file_names) {
   result_list <- append(result_list, list(data))
 }
 
-
-
-system("sysctl hw.memsize")
-
-str(result_list)
-
 # Combine all data frames into one (in chunks size otherwise R crashes for me)
 # Function to process and bind rows in chunks
 process_in_chunks <- function(data_list, chunk_size) {
@@ -95,12 +89,12 @@ allSubjData <- process_in_chunks(result_list, chunk_size)
 save(allSubjData, file = file.path(output_dir, "merged_results.RData"))
 
 # Print structure of the combined data
-str(allSubjData)
+unique(allSubjData$Subject)
 
 load(file.path(output_dir, "merged_results.RData"))
 
 # Define subjects according to counterbalancing version
-subjects_SR_1234 <- c(1:3, 6:57)
+subjects_SR_1234 <- c(1:81)
 
 
 # define compute strategy function
@@ -250,9 +244,12 @@ save(all_strategy_results, file = file.path(output_dir, "strategy_results.RData"
 # List of NF and sham subjects without the "VP_" prefix
 nf_subjects <- c("001", "002", "003", "007", "009", "011", "012", 
                  "014", "015", "016", "019", "020", "028", "033", 
-                 "041", "043", "044")
+                 "041", "043", "044", "058", "059", "061", "062", "063", "064", "066", "077")
+                 
 sham_subjects <- c("025", "026", "027", "030", "034", "037", "038", 
-                   "039", "045", "046", "051", "054", "056", "057")
+                   "039", "045", "046", "051", "054", "056", "057", "071", "080", "081")
+
+
 
 # Combine the list of subjects and add group information
 group_mapping <- data.frame(
@@ -279,47 +276,69 @@ long_strategy_data <- filtered_strategy_results %>%
 
 str(long_strategy_data)
 
-# Filter strategies with a score <= 0.16
-long_strategy_data_filtered <- long_strategy_data %>%
-  filter(Score <= 0.16)
 
 # check for lowest strategy
-lowest_strategy_data <- long_strategy_data_filtered %>%
+lowest_strategy_data <- long_strategy_data %>%
   group_by(Subject, Block) %>%
   slice(which.min(Score)) %>%
   ungroup()
 
+# Filter strategies with a score <= 0.16
+lowest_strategy_data_filtered <- lowest_strategy_data %>%
+  mutate(Strategie = if_else(Score > 0.16, "Other/No Strategy", Strategie))
+
+table(lowest_strategy_data_filtered$Strategie)
 
 # chi square test
 chi_square_results <- list()
 
-for(block in unique(lowest_strategy_data$Block)) {
-  block_data <- lowest_strategy_data %>%
+for(block in unique(lowest_strategy_data_filtered$Block)) {
+  block_data <- lowest_strategy_data_filtered %>%
     filter(Block == block) %>%
-    count(Group.x, Strategie)
+    count(Group.x, Strategie) %>%
+    complete(Group.x, Strategie, fill = list(n = 0))  # Ensure all combinations are present
   
   contingency_table <- xtabs(n ~ Group.x + Strategie, data = block_data)
   
   chi_square_results[[block]] <- chisq.test(contingency_table)
 }
 
+
 # Display results
-chi_square_results
+for(block in names(chi_square_results)) {
+  cat("\nResults for block:", block, "\n")
+  result <- chi_square_results[[block]]
+  print(result)
+  
+  cat("Observed counts:\n")
+  print(result$observed)
+  
+  cat("Expected counts:\n")
+  print(result$expected)
+  
+  cat("Residuals:\n")
+  print(result$residuals)
+  
+  cat("Standardized Residuals:\n")
+  print(result$stdres)
+}
 
 
 # analyze stratagiessimpliefied vs multicue
 
-multi_cue_strategies <- c("MultiCue-Max", "MultiCue-Match ", "Cue3")  # Update this list with the actual multi-cue strategy names
+multi_cue_strategies <- c("MultiCue-Max", "MultiCue-Match")  # Update this list with the actual multi-cue strategy names
 
-long_strategy_data_filtered_simplified <- long_strategy_data_filtered %>%
-  mutate(Strategie = ifelse(Strategie %in% multi_cue_strategies, "multi cue", "simple strategies"))
+# Update the long_strategy_data_filtered_simplified to include "Other/No Strategy"
+long_strategy_data_filtered_simplified <- lowest_strategy_data_filtered %>%
+  mutate(Strategie = ifelse(Score > 0.16, "No Strategy identifiable", 
+                            ifelse(Strategie %in% multi_cue_strategies, "Complex Strategy", "Simple strategy")))
+
 
 # check for lowest strategy
 lowest_strategy_data_simplified <- long_strategy_data_filtered_simplified %>%
   group_by(Subject, Block) %>%
   slice(which.min(Score)) %>%
   ungroup()
-
 
 # chi square test
 chi_square_results_simplified <- list()
@@ -335,36 +354,73 @@ for(block in unique(lowest_strategy_data_simplified$Block)) {
 }
 
 # Display results
-chi_square_results_simplified
+for(block in names(chi_square_results_simplified)) {
+  cat("\nResults for block:", block, "\n")
+  result <- chi_square_results_simplified[[block]]
+  print(result)
+  
+  cat("Observed counts:\n")
+  print(result$observed)
+  
+  cat("Expected counts:\n")
+  print(result$expected)
+  
+  cat("Residuals:\n")
+  print(result$residuals)
+  
+  cat("Standardized Residuals:\n")
+  print(result$stdres)
+}
 
+lowest_strategy_data_simplified
 
 # visualization 
 
-# Ensure the data is in the correct format for plotting
-plot_data <- lowest_strategy_data_simplified %>%
-  count(Group.x, Block, Strategie) %>%
-  group_by(Block, Strategie) %>%
-  mutate(Percentage = n / sum(n) * 100)
+plot_data_simplified <- lowest_strategy_data_simplified %>%
+  filter(Block %in% c("K 1/1")) %>%
+  group_by(Block, Strategie, Group.x) %>%
+  summarise(Count = n_distinct(Subject)) %>%
+  ungroup()
 
-filtered_plot_data <- plot_data %>%
-  filter(Block %in% c("K 1/4", "K 2/4", "K 3/4", "K 4/4"))
+total_subjects_per_group <- lowest_strategy_data_simplified %>%
+  filter(Block %in% c("K 1/1")) %>%
+  distinct(Block, Group.x, Subject) %>%
+  group_by(Block, Group.x) %>%
+  summarise(Total = n()) %>%
+  ungroup()
+
+# Merge the total counts with the summary data and calculate percentages
+plot_data_simplified <- plot_data_simplified %>%
+  left_join(total_subjects_per_group, by = c("Block", "Group.x")) %>%
+  mutate(Percentage = (Count / Total) * 100)
+
+plot_data_simplified_filtered <- plot_data_simplified %>%
+  filter(Strategie != "Other/No Strategy")
 
 
-# Create the bar plot
-# Create the bar plot
-library(ggplot2)
+# Create the bar plot using percentages with customizations
 
-# Create the bar plot
-ggplot(filtered_plot_data, aes(x = Block, y = Percentage, fill = Group.x)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
-  facet_wrap(~ Strategie, scales = "free_x") +
-  labs(title = "Strategy Usage by Group and Block",
-       x = "Block",
-       y = "% Subjects",
+# Create custom labels with newline characters
+custom_labels <- c("Complex\nStrategy", "No Strategy\nIdentifiable", "Simple\nStrategy")
+
+# Create the bar plot using percentages with customizations
+ggplot(plot_data_simplified, aes(x = Strategie, y = Percentage, fill = Group.x, color = Group.x)) +
+  geom_bar(stat = "identity", position = "dodge", size = 0.5) +  # Adjust the outline thickness with size
+  scale_fill_manual(values = c("white", "black"), 
+                    labels = c("NF", "Control")) +  # Change the fill colors to white and black
+  scale_color_manual(values = c("black", "black"), 
+                     labels = c("NF", "Control"), guide = FALSE) +  # Change the outline colors to black, hide the color legend
+  facet_wrap(~ Block) +
+  labs(x = "",
+       y = "Percent of Subjects",
        fill = "Group") +
+  scale_x_discrete(labels = custom_labels) +  # Apply the custom labels
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 7, face = "bold"),  # Set angle to 0 and center the text horizontally
+        strip.text.x = element_blank()) +  # Remove facet labels
+  guides(fill = guide_legend(override.aes = list(color = "black", size = 0.5)))  # Add black outline to legend keys
 
 
-# necxt steps:
-visualize the data (simpliefied and not)
+# Remove facet labels
+
+# plot for only all blocks

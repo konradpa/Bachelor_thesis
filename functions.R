@@ -14,13 +14,13 @@ library(R.matlab)
 
 
 
-ETQ_path <- "data/data_24.05/LimeSurveyResults_ExplicitTaskKnowledge_03052024.txt.csv"
+ETQ_path <- "Data/ETQ_final/LimeSurveyResults_ExplicitTaskKnowledge_19072024.csv"
 
-info_path <- "data/data_24.05/VP_information_03052024.xlsx"
+info_path <- "Data/VP_info_final/VP_information_18072024.xlsx"
 
-WPT_path <- "data/data_24.05/WPT_results/Results/"
+WPT_path <- "Data/WPT_final/Results/"
 
-feedback_path <- sprintf("Data/NF_values_11.06/NFBs_subj_%03d.mat", 1:33)
+feedback_path <- sprintf("Data/reward_final/Reward/NFBs_subj_%03d.mat", 1:77)
 
 
 format_vpn <- function(vpn) {

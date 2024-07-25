@@ -8,10 +8,6 @@ source("functions.R")
 # Read the participant information data
 info_data <- read_excel(info_path)
 
-# get general subject info
-group1_subjects <- info_data$VP[info_data_clean$group == "NF/control" | info_data_clean$group == "NF/stress"]
-group2_subjects <- info_data$VP[info_data_clean$group == "sham/control" | info_data_clean$group == "sham/stress"]
-
 
 # Clean participant information data
 info_data <- info_data %>%
@@ -22,6 +18,15 @@ info_data <- info_data %>%
 # Filter out specific groups
 info_data_clean <- info_data %>%
   filter(group != "NF/stress" & group != "sham/stress")
+
+length(info_data_clean$VPN)
+
+# get general subject info
+group1_subjects <- info_data_clean$VP[info_data_clean$group == "NF/control"]
+group2_subjects <- info_data_clean$VP[info_data_clean$group == "sham/control"]
+length(group1_subjects)
+length(group2_subjects)
+
 
 # analyze info data
 # age distribution
@@ -38,30 +43,60 @@ gender_percentages
 ETQ_data <- read_delim(ETQ_path, delim = ";", locale = locale(encoding = "UTF-8"))
 
 # Clean the ETQ data
+# Check the column names after cleaning
+ETQ_data <- ETQ_data %>% clean_names()
+
+# Rename and format the VPN column
 ETQ_data <- ETQ_data %>%
-  clean_names() %>%
-  rename(VPN = id_antwort_id) %>%
+  rename(VPN = g01q01_what_is_the_vpn_format_xxx) %>%
   mutate(VPN = sapply(VPN, format_vpn))
+
+unique(ETQ_data$VPN)
 
 # Add card order and group info to ETQ data
 ETQ_data <- ETQ_data %>%
   left_join(info_data %>% select(VPN, wpt_random_card_order_map, group), by = "VPN")
 
 # remove stress trials
-ETQ_data_clean <- ETQ_data[ETQ_data$group != "NF/stress" & ETQ_data$group != "sham/stress", ]
+ETQ_data_clean <- ETQ_data %>%
+  filter(group != "NF/stress" & group != "sham/stress")
 
 
 # Analyze ETQ data for overall score
 ETQ_data_clean<- analyze_etq_data(ETQ_data_clean)
 
+mean(ETQ_data_clean$overall_score)
+
+length(ETQ_data_clean$VPN)
+length(info_data_clean$VPN)
 
 # visualize the overall ETQ scores
 visualize_ETQ_scores(ETQ_data_clean)
+
+ETQ_data_clean %>%
+  group_by(group) %>%
+  summarize(mean = mean(overall_score, na.rm = TRUE), 
+            sd = sd(overall_score, na.rm = TRUE))
+
 
 #check for group differnces
 
 mean_accuracy_by_condition_ETQ <- ETQ_data_clean %>%
   group_by(group) %>% summarize(mean_overall = mean(overall_score, na.rm = TRUE))
+
+# visualize group differences
+
+ggplot(mean_accuracy_by_condition_ETQ, aes(x = group, y = mean_overall, fill = group, color = group)) +
+  geom_bar(stat = "identity", position = position_dodge(), size = 0.5) +  # Add outline to bars
+  scale_fill_manual(values = c("white", "black"), 
+                    labels = c("NF", "Control")) +  # Change the fill colors to white and black
+  scale_color_manual(values = c("black", "black"), 
+                     labels = c("NF", "Control"), guide = FALSE) + 
+  labs(title = "Mean Overall Score by Group",
+       x = "Group",
+       y = "Mean Overall Score") +
+  theme_minimal() +
+  guides(fill = guide_legend(override.aes = list(color = "black", size = 0.5)))  # Add black outline to legend keys
 
 
 ## **t test**  Explicit task knowledge
@@ -85,16 +120,8 @@ WPT_data <- lapply(WPT_file_list, load_WPT_file) %>%
   clean_WPT_data() %>%
   rename(VPN = n) %>%
   mutate(VPN = sapply(VPN, format_vpn)) %>%
-  filter(correctness != -1) %>%
   left_join(info_data_clean %>% select(VPN, group), by = "VPN") %>%
   filter(!is.na(group))
-
-
-# Remove or handle rows with missing values in stimulusPattern or correctOutcome
-WPT_data <- WPT_data %>%
-  filter(!is.na(stimulusPattern) & !is.na(correctOutcome)) %>%
-  mutate(stimulusPattern = gsub("\\s+", " ", trimws(stimulusPattern))) # Ensure consistent spacing and remove leading/trailing spaces
-
 
 # Calculate overall accuracy
 
@@ -102,6 +129,7 @@ WPT_accuracy_VPN <- WPT_data %>%
   group_by(VPN) %>%
   summarise(accuracy = mean(correctness))
 
+length(WPT_accuracy_VPN$VPN)
 
 mean(WPT_accuracy_VPN$accuracy)
 
@@ -143,6 +171,8 @@ WPT_accuracy_blocks <- WPT_data %>%
   group_by(blockNumber) %>%
   summarise(accuracy = mean(correctness))
 
+str(WPT_accuracy_blocks)
+
 # Visualize the data
 ggplot(WPT_accuracy_blocks, aes(x = factor(blockNumber), y = accuracy)) +
   geom_bar(stat = "identity", fill = "skyblue") +
@@ -162,6 +192,8 @@ WPT_accuracy_VPN_blocks <- WPT_data %>%
 
 WPT_accuracy_VPN_blocks  <- WPT_accuracy_VPN_blocks  %>%
   left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
+
+str(WPT_accuracy_VPN_blocks)
 
 
 WPT_accuracy_VPN_blocks <- WPT_accuracy_VPN_blocks %>%
@@ -194,11 +226,18 @@ mean_accuracy_by_block_group <- WPT_accuracy_VPN_blocks %>%
   ungroup()
 
 ggplot(mean_accuracy_by_block_group, aes(x = block, y = mean_accuracy, fill = group)) +
-  geom_bar(stat = "identity", position = position_dodge()) +
-  labs(title = "Mean Accuracy by Block and Group",
-       x = "Block",
+  geom_bar(stat = "identity", position = position_dodge(), color = "black", size = 0.5) +  # Add outline to bars
+  scale_fill_manual(values = c("white", "black"), 
+                    labels = c("NF", "Control")) +  # Change the fill colors to white and black
+  scale_color_manual(values = c("black", "black"), 
+                     labels = c("NF", "Control"), guide = FALSE) +  
+  scale_x_discrete(labels = c("block_1" = "Block 1", "block_2" = "Block 2", "block_3" = "Block 3", "block_4" = "Block 4")) +  # Change the block labels
+  labs(x = "Block",
        y = "Mean Accuracy") +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 7, face = "bold"),  # Set angle to 0 and center the text horizontally
+        strip.text.x = element_blank()) +
+  guides(fill = guide_legend(override.aes = list(color = "black", size = 0.5)))  # Correctly place guides function
 
 # check for differnces between blocks in each group
 long_WPT_data <- WPT_accuracy_VPN_blocks %>%
@@ -210,7 +249,7 @@ long_WPT_data <- WPT_accuracy_VPN_blocks %>%
 feedback_values <- list()
 
 # Loop through the file paths and extract the required values
-for (i in 1:33) {
+for (i in 1:81) {
   if (file.exists(feedback_path[i])) {
     feedback_values[[i]] <- extract_values(feedback_path[i])
   } else {
@@ -236,7 +275,7 @@ colnames(feedback_values_df) <- paste0("V", 1:ncol(feedback_values_df))
 feedback_values_df <- as.data.frame(feedback_values_df)
 
 # Add a column for the VPN number
-feedback_values_df$VPN <- sprintf("VP_%03d", 1:33)
+feedback_values_df$VPN <- sprintf("VP_%03d", 1:81)
 
 # Calculate the average of the extracted values for each participant
 feedback_values_df$average <- rowMeans(feedback_values_df[, 1:max_length], na.rm = TRUE)
@@ -257,13 +296,20 @@ print(feedback_values_df)
 ## add to other data
 
 WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
-  left_join(extracted_df %>% select(VPN, "average_last_5"), by = "VPN")
+  left_join(feedback_values_df %>% select(VPN, "average_last_5"), by = "VPN")
 
 
 ## test for correlations
 
 correlation_result <- cor.test(WPT_accuracy_VPN$accuracy, WPT_accuracy_VPN$average_last_5)
 
+
+#t test
+WPT_accuracy_VPN$group <- as.factor(WPT_accuracy_VPN$group)
+WPT_accuracy_VPN$average_last_5 <- as.numeric(WPT_accuracy_VPN$average_last_5)
+
+t_test_result_reward_group<- t.test(average_last_5 ~ group, data = na.omit(WPT_accuracy_VPN))
+str(WPT_accuracy_VPN)
 
 
 
