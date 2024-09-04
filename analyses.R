@@ -15,23 +15,18 @@ info_data <- info_data %>%
   rename(VPN = vpn) %>%
   as.data.frame()
 
-# Filter out specific groups
+# Filter out stress groups
 info_data_clean <- info_data %>%
   filter(group != "NF/stress" & group != "sham/stress")
 
 length(info_data_clean$VPN)
 
 # get general subject info
-group1_subjects <- info_data_clean$VP[info_data_clean$group == "NF/control"]
-group2_subjects <- info_data_clean$VP[info_data_clean$group == "sham/control"]
-length(group1_subjects)
-length(group2_subjects)
-
+NF_subjects <- info_data_clean[info_data_clean$group == "NF/control", ]
+sham_subjects <- info_data_clean[info_data_clean$group == "sham/control", ]
 
 # analyze info data
-# age distribution
-mean(info_data_clean$age)
-
+# age distributionin
 # gender distribution
 gender_counts <- table(info_data_clean$m_f)
 
@@ -55,49 +50,55 @@ unique(ETQ_data$VPN)
 
 # Add card order and group info to ETQ data
 ETQ_data <- ETQ_data %>%
-  left_join(info_data %>% select(VPN, wpt_random_card_order_map, group), by = "VPN")
+  left_join(info_data %>% 
+              select(VPN, wpt_random_card_order_map, group) %>%
+              mutate(wpt_random_card_order_map = as.character(wpt_random_card_order_map)), 
+            by = "VPN")
+
+ETQ_data$group
+ETQ_data$wpt_random_card_order_map
 
 # remove stress trials
 ETQ_data_clean <- ETQ_data %>%
   filter(group != "NF/stress" & group != "sham/stress")
 
+ETQ_data_clean$group
+ETQ_data_clean$wpt_random_card_order_map
 
-# Analyze ETQ data for overall score
+# Analyze ETQ data for score
+
 ETQ_data_clean<- analyze_etq_data(ETQ_data_clean)
 
 mean(ETQ_data_clean$overall_score)
 
-length(ETQ_data_clean$VPN)
-length(info_data_clean$VPN)
-
 # visualize the overall ETQ scores
 visualize_ETQ_scores(ETQ_data_clean)
-
-ETQ_data_clean %>%
-  group_by(group) %>%
-  summarize(mean = mean(overall_score, na.rm = TRUE), 
-            sd = sd(overall_score, na.rm = TRUE))
-
 
 #check for group differnces
 
 mean_accuracy_by_condition_ETQ <- ETQ_data_clean %>%
-  group_by(group) %>% summarize(mean_overall = mean(overall_score, na.rm = TRUE))
-
+  group_by(group) %>%
+  summarize(
+    mean_overall = mean(overall_score, na.rm = TRUE),
+    se = sd(overall_score, na.rm = TRUE) / sqrt(n())
+  )
 # visualize group differences
 
+# Create the bar plot with error bars
 ggplot(mean_accuracy_by_condition_ETQ, aes(x = group, y = mean_overall, fill = group, color = group)) +
   geom_bar(stat = "identity", position = position_dodge(), size = 0.5) +  # Add outline to bars
-  scale_fill_manual(values = c("white", "black"), 
-                    labels = c("NF", "Control")) +  # Change the fill colors to white and black
-  scale_color_manual(values = c("black", "black"), 
-                     labels = c("NF", "Control"), guide = FALSE) + 
-  labs(title = "Mean Overall Score by Group",
+  geom_errorbar(aes(ymin = mean_overall - se, ymax = mean_overall + se), 
+                position = position_dodge(0.9), width = 0.25, color = "red") +  # Add error bars
+  scale_fill_manual(values = c("white", "black")) +  # Change the fill colors to white and black
+  scale_color_manual(values = c("black", "black"), guide = FALSE) +  # Change the outline colors to black, hide the color legend
+  scale_x_discrete(labels = c("NF/control" = "NF", "sham/control" = "Sham")) +  # Change the block labels
+  labs(title = "ETQ Score by Group",
        x = "Group",
-       y = "Mean Overall Score") +
+       y = "Mean Score") +
   theme_minimal() +
-  guides(fill = guide_legend(override.aes = list(color = "black", size = 0.5)))  # Add black outline to legend keys
-
+  theme(legend.position = "none",  # Remove the legend
+        axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10, face = "bold"),  # Adjust the text size and make it bold
+        strip.text.x = element_blank())  # Remove facet labels
 
 ## **t test**  Explicit task knowledge
 
@@ -110,6 +111,7 @@ leveneTest(overall_score ~ group, data = ETQ_data_clean)
 
 # t test
 t_test_result_ETQ<- t.test(overall_score ~ group, data = ETQ_data_clean)
+mann_whitney_result_ETQ <- wilcox.test(overall_score ~ group, data = ETQ_data_clean)
 
 
 # Read and clean WPT Data
@@ -138,6 +140,7 @@ mean(WPT_accuracy_VPN$accuracy)
 WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
   left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
 
+
 # test for differences - **t-test**  WPT performance with groups
 # Normality of the data
 shapiro.test(WPT_accuracy_VPN$accuracy[WPT_accuracy_VPN$group == "NF/control"])
@@ -159,11 +162,23 @@ ETQ_WPT_acc_correlation_result <- cor.test(WPT_accuracy_VPN$accuracy, WPT_accura
 
 ggplot(WPT_accuracy_VPN, aes(x = overall_score, y = accuracy)) +
   geom_point() +  # Add points
-  geom_smooth(method = "lm", col = "blue") +  # Add regression line
-  labs(title = "Scatter Plot of Accuracy vs. Overall Score",
-       x = "Overall Score",
-       y = "Accuracy") +
+  geom_smooth(method = "lm", col = "red") +  # Add regression line
+  labs(title = "Plot of WPT Accuracy vs. ETQ Score",
+       x = "ETQ Score",
+       y = "WPT Accuracy") +
   theme_minimal()
+
+# For NF group only
+# Filter data for the NF/control group
+WPT_accuracy_VPN_NF <- WPT_accuracy_VPN %>%
+  filter(group == "NF/control")
+
+# Perform correlation test between ETQ score and WPT accuracy in the NF/control group
+ETQ_WPT_acc_correlation_result_NF <- cor.test(WPT_accuracy_VPN_NF$accuracy, WPT_accuracy_VPN_NF$overall_score)
+
+# Print the result
+print(ETQ_WPT_acc_correlation_result_NF)
+
 
 # WPT accuracy per blocks
 
@@ -175,10 +190,10 @@ str(WPT_accuracy_blocks)
 
 # Visualize the data
 ggplot(WPT_accuracy_blocks, aes(x = factor(blockNumber), y = accuracy)) +
-  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_bar(stat = "identity", fill = "grey") +
   geom_point(size = 3) +
   geom_line(aes(group = 1)) +
-  labs(title = "Mean accuracy across Blocks", x = "Block Number", y = "Accuracy") +
+  labs(title = "Mean accuracy across Blocks", x = "Block Number", y = " Mean Accuracy") +
   theme_minimal()
 
 # **check for correlation** beween blocks and WPT accuracy
@@ -219,97 +234,34 @@ t_test_result_WPT_acc_blocks <- WPT_accuracy_VPN_blocks %>%
 print(t_test_result_WPT_acc_blocks)
 
 # visualize WPT performance between groups in blocks
-mean_accuracy_by_block_group <- WPT_accuracy_VPN_blocks %>%
-  pivot_longer(cols = starts_with("block_"), names_to = "block", values_to = "accuracy") %>%
-  group_by(block, group) %>%
-  summarise(mean_accuracy = mean(accuracy, na.rm = TRUE)) %>%
-  ungroup()
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
 
-ggplot(mean_accuracy_by_block_group, aes(x = block, y = mean_accuracy, fill = group)) +
-  geom_bar(stat = "identity", position = position_dodge(), color = "black", size = 0.5) +  # Add outline to bars
-  scale_fill_manual(values = c("white", "black"), 
-                    labels = c("NF", "Control")) +  # Change the fill colors to white and black
-  scale_color_manual(values = c("black", "black"), 
-                     labels = c("NF", "Control"), guide = FALSE) +  
+# Calculate mean accuracy and standard error for each block and group
+mean_accuracy_by_block <- WPT_accuracy_VPN_blocks %>%
+  pivot_longer(cols = starts_with("block_"), names_to = "block", values_to = "accuracy") %>%
+  group_by(group, block) %>%
+  summarise(
+    mean_accuracy = mean(accuracy, na.rm = TRUE),
+    se = sd(accuracy, na.rm = TRUE) / sqrt(n())
+  )
+
+# Visualize WPT accuracy per block between groups
+ggplot(mean_accuracy_by_block, aes(x = block, y = mean_accuracy, fill = group, color = group)) +
+  geom_bar(stat = "identity", position = position_dodge(), size = 0.5) +  # Add outline to bars
+  geom_errorbar(aes(ymin = mean_accuracy - se, ymax = mean_accuracy + se), 
+                position = position_dodge(0.9), width = 0.25, color = "red") +  # Add error bars
+  scale_fill_manual(values = c("white", "black")) +  # Change the fill colors to white and black
+  scale_color_manual(values = c("black", "black"), guide = FALSE) +  # Change the outline colors to black, hide the color legend
   scale_x_discrete(labels = c("block_1" = "Block 1", "block_2" = "Block 2", "block_3" = "Block 3", "block_4" = "Block 4")) +  # Change the block labels
-  labs(x = "Block",
+  labs(title = "WPT Accuracy by Block and Group",
+       x = "Block",
        y = "Mean Accuracy") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 7, face = "bold"),  # Set angle to 0 and center the text horizontally
-        strip.text.x = element_blank()) +
-  guides(fill = guide_legend(override.aes = list(color = "black", size = 0.5)))  # Correctly place guides function
-
-# check for differnces between blocks in each group
-long_WPT_data <- WPT_accuracy_VPN_blocks %>%
-  pivot_longer(cols = starts_with("block_"), names_to = "block", values_to = "accuracy")
-
-# analyzte reward feedback
-
-# Initialize a list to store the extracted values
-feedback_values <- list()
-
-# Loop through the file paths and extract the required values
-for (i in 1:81) {
-  if (file.exists(feedback_path[i])) {
-    feedback_values[[i]] <- extract_values(feedback_path[i])
-  } else {
-    feedback_values[[i]] <- NA  # Handle missing files by filling with NA
-  }
-}
-
-# Determine the maximum length of extracted values
-max_length <- max(sapply(feedback_values, function(x) ifelse(is.null(x) || all(is.na(x)), 0, length(x))))
-
-# Pad shorter vectors with NA to ensure all have the same length
-padded_feedback_values <- lapply(feedback_values, function(x) {
-  if (is.null(x) || all(is.na(x))) {
-    return(rep(NA, max_length))
-  } else {
-    return(c(x, rep(NA, max_length - length(x))))
-  }
-})
-
-# Convert the list to a data frame
-feedback_values_df <- do.call(rbind, padded_feedback_values)
-colnames(feedback_values_df) <- paste0("V", 1:ncol(feedback_values_df))
-feedback_values_df <- as.data.frame(feedback_values_df)
-
-# Add a column for the VPN number
-feedback_values_df$VPN <- sprintf("VP_%03d", 1:81)
-
-# Calculate the average of the extracted values for each participant
-feedback_values_df$average <- rowMeans(feedback_values_df[, 1:max_length], na.rm = TRUE)
-
-feedback_values_df$average_last_5 <- apply(feedback_values_df[, 1:max_length], 1, function(row) {
-  last_5 <- tail(na.omit(row), 5)
-  if (length(last_5) < 5) {
-    return(NA)
-  } else {
-    return(mean(last_5, na.rm = TRUE))
-  }
-})
-
-
-# Print the filtered data frame
-print(feedback_values_df)
-
-## add to other data
-
-WPT_accuracy_VPN <- WPT_accuracy_VPN %>%
-  left_join(feedback_values_df %>% select(VPN, "average_last_5"), by = "VPN")
-
-
-## test for correlations
-
-correlation_result <- cor.test(WPT_accuracy_VPN$accuracy, WPT_accuracy_VPN$average_last_5)
-
-
-#t test
-WPT_accuracy_VPN$group <- as.factor(WPT_accuracy_VPN$group)
-WPT_accuracy_VPN$average_last_5 <- as.numeric(WPT_accuracy_VPN$average_last_5)
-
-t_test_result_reward_group<- t.test(average_last_5 ~ group, data = na.omit(WPT_accuracy_VPN))
-str(WPT_accuracy_VPN)
-
+  theme(legend.position = "none",  # Remove the legend
+        axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10, face = "bold"),  # Adjust the text size and make it bold
+        strip.text.x = element_blank())  # Remove facet labels
 
 

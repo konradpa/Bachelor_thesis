@@ -8,7 +8,7 @@ library(emmeans)
 library(broom)  
 library(car)
 library(purrr)  
-library(R.matlab)
+library(gtools)
 
 
 
@@ -28,30 +28,28 @@ format_vpn <- function(vpn) {
 }
 
 
-# analyze ETQ data
+# ETQ score analysis
 
-correct_orders <- list(
-  "1234" = c("Quadrate", "Karos", "Kreise", "Dreiecke"),
-  "2134" = c("Karos", "Quadrate", "Kreise", "Dreiecke"),
-  "3124" = c("Kreise", "Quadrate", "Karos", "Dreiecke"),
-  "4123" = c("Dreiecke", "Quadrate", "Karos", "Kreise"),
-  "1324" = c("Quadrate", "Kreise", "Karos", "Dreiecke"),
-  "2314" = c("Karos", "Kreise", "Quadrate", "Dreiecke"),
-  "3214" = c("Kreise", "Karos", "Quadrate", "Dreiecke"),
-  "4321" = c("Dreiecke", "Kreise", "Karos", "Quadrate"),
-  "1243" = c("Quadrate", "Karos", "Dreiecke", "Kreise"),
-  "2143" = c("Karos", "Quadrate", "Dreiecke", "Kreise"),
-  "3142" = c("Kreise", "Quadrate", "Dreiecke", "Karos"),
-  "1342" = c("Quadrate", "Kreise", "Dreiecke", "Karos"),
-  "2413" = c("Karos", "Dreiecke", "Quadrate", "Kreise"),
-  "3412" = c("Kreise", "Dreiecke", "Quadrate", "Karos"),
-  "1432" = c("Quadrate", "Dreiecke", "Kreise", "Karos"),
-  "4231" = c("Dreiecke", "Karos", "Quadrate", "Kreise"),
-  "1423" = c("Quadrate", "Dreiecke", "Karos", "Kreise"),
-  "3241" = c("Kreise", "Quadrate", "Dreiecke", "Karos"),
-  "4213" = c("Dreiecke", "Karos", "Kreise", "Quadrate"),
-  "2341" = c("Karos", "Kreise", "Dreiecke", "Quadrate")
-)
+# Define the shapes
+shapes <- c("Quadrate", "Karos", "Kreise", "Dreiecke")
+
+# Generate all permutations of the numbers 1, 2, 3, and 4
+permutations <- gtools::permutations(n = 4, r = 4, v = c(1, 2, 3, 4))
+
+# Initialize an empty list to store the correct orders
+correct_orders <- list()
+
+# Loop through each permutation
+for (i in 1:nrow(permutations)) {
+  # Create a permutation string (e.g., "1234")
+  perm_string <- paste(permutations[i, ], collapse = "")
+  
+  # Map the permutation to the corresponding shapes
+  correct_orders[[perm_string]] <- shapes[permutations[i, ]]
+}
+
+# View the resulting list
+correct_orders
 
 # Function to check if participant's answer matches the correct order
 check_correct_order <- function(row, correct_orders) {
@@ -70,7 +68,42 @@ check_correct_order <- function(row, correct_orders) {
 
 
 analyze_etq_data <- function(ETQ_data) {
-  # Analyze answers
+  
+  # Function to calculate the score for each card dynamically
+  calculate_score <- function(card_name, answer_column, correct_orders, wpt_random_card_order_map_char) {
+    card_position = match(card_name, correct_orders[[wpt_random_card_order_map_char]])
+    
+    correct_sun_range_lower = case_when(
+      card_position == 1 ~ 80.7,
+      card_position == 2 ~ 57.5,
+      card_position == 3 ~ 32.5,
+      card_position == 4 ~ 9.3,
+      TRUE ~ NA_real_
+    )
+    correct_sun_range_upper = case_when(
+      card_position == 1 ~ 90.7,
+      card_position == 2 ~ 67.5,
+      card_position == 3 ~ 43.5,
+      card_position == 4 ~ 19.3,
+      TRUE ~ NA_real_
+    )
+    
+    participant_answer = as.numeric(answer_column)
+    
+    score = ifelse(participant_answer >= correct_sun_range_lower & participant_answer <= correct_sun_range_upper, 1, 0)
+    
+    return(score)
+  }
+  
+  # Logic for determining the card most associated with rain (position 4)
+  get_card_for_rain <- function(cardOrder) {
+    return(cardOrder[4])
+  }
+  
+  # Logic for determining the card most associated with sun (position 1)
+  get_card_for_sun <- function(cardOrder) {
+    return(cardOrder[1])
+  }
   
   # Score for the first question
   ETQ_data <- ETQ_data %>%
@@ -88,43 +121,53 @@ analyze_etq_data <- function(ETQ_data) {
   ETQ_data <- ETQ_data %>%
     mutate(score_q5 = ifelse(g02q05_sq001_wie_viele_karten_wurden_ihnen_pro_durchgang_gezeigt_1_3_karten == "Ja", 1, 0))
   
-  # Score for the fifth question
+  # Score for questions 6 to 9 (Sun percentage for each card)
   ETQ_data <- ETQ_data %>%
-    mutate(score_q6 = ifelse(as.numeric(g02q06_wenn_nur_die_karte_mit_den_kreisen_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne) >= 32.5 &
-                               as.numeric(g02q06_wenn_nur_die_karte_mit_den_kreisen_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne) <= 43.5, 1, 0))
+    rowwise() %>%
+    mutate(
+      wpt_random_card_order_map_char = as.character(wpt_random_card_order_map),
+      
+      # Score for the Quadrate (Squares) card, using g02q09 as the answer column
+      score_q6 = calculate_score("Quadrate", g02q09_wenn_nur_die_karte_mit_den_quadraten_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne, correct_orders, wpt_random_card_order_map_char),
+      
+      # Score for the Karos (Diamonds) card, using g02q08 as the answer column
+      score_q7 = calculate_score("Karos", g02q08_wenn_nur_die_karte_mit_den_karos_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne, correct_orders, wpt_random_card_order_map_char),
+      
+      # Score for the Kreise (Circles) card, using g02q06 as the answer column
+      score_q8 = calculate_score("Kreise", g02q06_wenn_nur_die_karte_mit_den_kreisen_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne, correct_orders, wpt_random_card_order_map_char),
+      
+      # Score for the Dreiecke (Triangles) card, using g02q07 as the answer column
+      score_q9 = calculate_score("Dreiecke", g02q07_wenn_nur_die_karte_mit_den_dreiecken_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne, correct_orders, wpt_random_card_order_map_char),
+      
+      # Score for Question 10: Which card corresponds to "rain" (position 4)
+      score_q10 = case_when(
+        get_card_for_rain(correct_orders[[wpt_random_card_order_map_char]]) == "Kreise" & g02q10_sq001_nehmen_sie_an_sie_wissen_dass_es_regnen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_kreisen == "Ja" ~ 1,
+        get_card_for_rain(correct_orders[[wpt_random_card_order_map_char]]) == "Dreiecke" & g02q10_sq004_nehmen_sie_an_sie_wissen_dass_es_regnen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_dreiecken == "Ja" ~ 1,
+        get_card_for_rain(correct_orders[[wpt_random_card_order_map_char]]) == "Quadrate" & g02q10_sq003_nehmen_sie_an_sie_wissen_dass_es_regnen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_quadraten == "Ja" ~ 1,
+        get_card_for_rain(correct_orders[[wpt_random_card_order_map_char]]) == "Karos" & g02q10_sq002_nehmen_sie_an_sie_wissen_dass_es_regnen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_karos == "Ja" ~ 1,
+        TRUE ~ 0
+      ),
+      
+      # Score for Question 11: Which card corresponds to "sun" (position 1)
+      score_q11 = case_when(
+        get_card_for_sun(correct_orders[[wpt_random_card_order_map_char]]) == "Kreise" & g02q11_sq001_nehmen_sie_an_sie_wissen_dass_die_sonne_scheinen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_kreisen == "Ja" ~ 1,
+        get_card_for_sun(correct_orders[[wpt_random_card_order_map_char]]) == "Dreiecke" & g02q11_sq004_nehmen_sie_an_sie_wissen_dass_die_sonne_scheinen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_dreiecken == "Ja" ~ 1,
+        get_card_for_sun(correct_orders[[wpt_random_card_order_map_char]]) == "Quadrate" & g02q11_sq003_nehmen_sie_an_sie_wissen_dass_die_sonne_scheinen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_quadraten == "Ja" ~ 1,
+        get_card_for_sun(correct_orders[[wpt_random_card_order_map_char]]) == "Karos" & g02q11_sq002_nehmen_sie_an_sie_wissen_dass_die_sonne_scheinen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_karos == "Ja" ~ 1,
+        TRUE ~ 0
+      )
+    ) %>%
+    ungroup()
   
-  # Score for the sixth question
-  ETQ_data <- ETQ_data %>%
-    mutate(score_q7 = ifelse(as.numeric(g02q07_wenn_nur_die_karte_mit_den_dreiecken_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne) >= 9.3 &
-                               as.numeric(g02q07_wenn_nur_die_karte_mit_den_dreiecken_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne) <= 19.3, 1, 0))
-  
-  # Score for the seventh question
-  ETQ_data <- ETQ_data %>%
-    mutate(score_q8 = ifelse(as.numeric(g02q08_wenn_nur_die_karte_mit_den_karos_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne) >= 57.5 &
-                               as.numeric(g02q08_wenn_nur_die_karte_mit_den_karos_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne) <= 67.5, 1, 0))
-  
-  # Score for the eighth question
-  ETQ_data <- ETQ_data %>%
-    mutate(score_q9 = ifelse(as.numeric(g02q09_wenn_nur_die_karte_mit_den_quadraten_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne) >= 80.7 &
-                               as.numeric(g02q09_wenn_nur_die_karte_mit_den_quadraten_gezeigt_wurde_zu_wie_viel_prozent_schien_die_sonne) <= 90.7, 1, 0))
-  
-  # Score for the ninth question
-  ETQ_data <- ETQ_data %>%
-    mutate(score_q10 = ifelse(g02q10_sq004_nehmen_sie_an_sie_wissen_dass_es_regnen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_dreiecken == "Ja", 1, 0))
-  
-  # Score for the tenth question
-  ETQ_data <- ETQ_data %>%
-    mutate(score_q11 = ifelse(g02q11_sq003_nehmen_sie_an_sie_wissen_dass_die_sonne_scheinen_wird_welche_karte_wurde_ihnen_hochstwahrscheinlich_gezeigt_die_karte_mit_den_quadraten == "Ja", 1, 0))
-  
-  # Score for the eleventh question
+  # Score for the eleventh question: checking card order
   ETQ_data <- ETQ_data %>%
     rowwise() %>%
     mutate(score_q12 = check_correct_order(cur_data(), correct_orders)) %>%
     ungroup()
   
-  # Calculate the overall score by summing score_q1 to score_q13
+  # Calculate the overall score by summing score_q2 to score_q12
   ETQ_data <- ETQ_data %>%
-    mutate(overall_score = score_q2 + score_q3 + score_q4 + score_q5 + 
+    mutate(overall_score = score_q2 + score_q3 + score_q4 + score_q5 +
              score_q6 + score_q7 + score_q8 + score_q9 + score_q10 + score_q11 + score_q12)
   
   # Reorder columns to place overall_score as the first column
