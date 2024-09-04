@@ -15,24 +15,47 @@ info_data <- info_data %>%
   rename(VPN = vpn) %>%
   as.data.frame()
 
-# Filter out stress groups
+# Filter out stress groups and particpants 009
 info_data_clean <- info_data %>%
-  filter(group != "NF/stress" & group != "sham/stress")
+  filter(group != "NF/stress" & group != "sham/stress") %>%
+  filter(VPN != "VP_009")  # Exclude only VP_009
+
 
 length(info_data_clean$VPN)
 
 # get general subject info
+
+mean(info_data_clean$age)
+sd(info_data_clean$age)
+min(info_data_clean$age)
+max(info_data_clean$age)
+
+gender_counts <- table(info_data_clean$m_f)
+
+
 NF_subjects <- info_data_clean[info_data_clean$group == "NF/control", ]
 sham_subjects <- info_data_clean[info_data_clean$group == "sham/control", ]
+
+mean(NF_subjects$age)
+sd(NF_subjects$age)
+min(NF_subjects$age)
+max(NF_subjects$age)
+length(NF_subjects$VPN)
+gender_counts_NF <- table(NF_subjects$m_f)
+
+
+mean(sham_subjects$age)
+sd(sham_subjects$age)
+min(sham_subjects$age)
+max(sham_subjects$age)
+length(sham_subjects$VPN)
+
 
 # analyze info data
 # age distributionin
 # gender distribution
-gender_counts <- table(info_data_clean$m_f)
 
-gender_percentages <- prop.table(gender_counts) * 100
 
-gender_percentages
 
 # Read the ETQ data
 ETQ_data <- read_delim(ETQ_path, delim = ";", locale = locale(encoding = "UTF-8"))
@@ -73,6 +96,15 @@ mean(ETQ_data_clean$overall_score)
 
 # visualize the overall ETQ scores
 visualize_ETQ_scores(ETQ_data_clean)
+
+# check for outliers
+
+# Calculate z-scores
+z_scores_ETQ <- scale(ETQ_data_clean$overall_score)
+
+# Identify outliers (with z-score > 3 or < -3)
+outliers_ETQ <- ETQ_data_clean$overall_score[abs(z_scores_ETQ) > 3]
+outliers_ETQ
 
 #check for group differnces
 
@@ -123,13 +155,25 @@ WPT_data <- lapply(WPT_file_list, load_WPT_file) %>%
   rename(VPN = n) %>%
   mutate(VPN = sapply(VPN, format_vpn)) %>%
   left_join(info_data_clean %>% select(VPN, group), by = "VPN") %>%
-  filter(!is.na(group))
+  filter(!is.na(group)) %>%
+  filter(!VPN %in% c("VP_016", "VP_009"))  # Exclude both VP_016 and VP_009
+
+unique(WPT_data$VPN)
+
+str(WPT_data)
 
 # Calculate overall accuracy
-
 WPT_accuracy_VPN <- WPT_data %>%
   group_by(VPN) %>%
   summarise(accuracy = mean(correctness))
+
+
+# Calculate z-scores
+z_scores_WPT_acc <- scale(WPT_accuracy_VPN$accuracy)
+
+# Identify outliers (with z-score > 3 or < -3)
+outliers_WPT_acc <- WPT_accuracy_VPN$accuracy[abs(z_scores_WPT_acc) > 3]
+outliers_WPT_acc
 
 length(WPT_accuracy_VPN$VPN)
 
@@ -168,18 +212,6 @@ ggplot(WPT_accuracy_VPN, aes(x = overall_score, y = accuracy)) +
        y = "WPT Accuracy") +
   theme_minimal()
 
-# For NF group only
-# Filter data for the NF/control group
-WPT_accuracy_VPN_NF <- WPT_accuracy_VPN %>%
-  filter(group == "NF/control")
-
-# Perform correlation test between ETQ score and WPT accuracy in the NF/control group
-ETQ_WPT_acc_correlation_result_NF <- cor.test(WPT_accuracy_VPN_NF$accuracy, WPT_accuracy_VPN_NF$overall_score)
-
-# Print the result
-print(ETQ_WPT_acc_correlation_result_NF)
-
-
 # WPT accuracy per blocks
 
 WPT_accuracy_blocks <- WPT_data %>%
@@ -209,6 +241,31 @@ WPT_accuracy_VPN_blocks  <- WPT_accuracy_VPN_blocks  %>%
   left_join(info_data_clean %>% select(VPN, "group"), by = "VPN")
 
 str(WPT_accuracy_VPN_blocks)
+
+# Ungroup the data first
+WPT_accuracy_VPN_blocks <- WPT_accuracy_VPN_blocks %>% ungroup()
+
+# Calculate Z-scores for each block using the scale() function
+WPT_accuracy_VPN_blocks <- WPT_accuracy_VPN_blocks %>%
+  mutate(
+    z_block_1 = scale(block_1),
+    z_block_2 = scale(block_2),
+    z_block_3 = scale(block_3),
+    z_block_4 = scale(block_4)
+  )
+
+# Identify outliers (with z-score > 3 or < -3) for each block
+outliers_block_1 <- WPT_accuracy_VPN_blocks$block_1[abs(WPT_accuracy_VPN_blocks$z_block_1) > 3]
+outliers_block_2 <- WPT_accuracy_VPN_blocks$block_2[abs(WPT_accuracy_VPN_blocks$z_block_2) > 3]
+outliers_block_3 <- WPT_accuracy_VPN_blocks$block_3[abs(WPT_accuracy_VPN_blocks$z_block_3) > 3]
+outliers_block_4 <- WPT_accuracy_VPN_blocks$block_4[abs(WPT_accuracy_VPN_blocks$z_block_4) > 3]
+
+# Print the outliers for each block
+outliers_block_1
+outliers_block_2
+outliers_block_3
+outliers_block_4
+
 
 
 WPT_accuracy_VPN_blocks <- WPT_accuracy_VPN_blocks %>%
